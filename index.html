@@ -76,13 +76,66 @@
 
         .stats-bar {
             display: flex;
-            justify-content: space-between;
+            flex-direction: column;
+            gap: 10px;
             background: var(--panel-bg);
-            padding: 12px 20px;
+            padding: 14px 20px;
             border-radius: 12px;
             font-size: 0.9rem;
-            font-weight: 600;
             border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .level-info-display {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 600;
+        }
+
+        .level-label {
+            color: var(--text-muted);
+        }
+
+        .level-label span {
+            color: var(--primary);
+        }
+
+        .level-name {
+            color: var(--text-main);
+        }
+
+        .progress-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .progress-bar {
+            flex: 1;
+            height: 8px;
+            background: var(--btn-bg);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            background: var(--primary);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        .progress-fill.reset {
+            transition: width 0.15s ease-out;
+        }
+
+        .progress-percent {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--primary);
+            min-width: 40px;
+            text-align: right;
         }
 
         .stat-item span {
@@ -566,9 +619,16 @@
         </header>
 
         <div class="stats-bar">
-            <div class="stat-item">Level <span id="level-display">1</span></div>
-            <div class="stat-item">Streak <span id="streak-display">0</span></div>
-            <div class="stat-item">Accuracy <span id="acc-display">100%</span></div>
+            <div class="level-info-display">
+                <span class="level-label">Level <span id="level-display">1</span>:</span>
+                <span id="level-name-display" class="level-name">—</span>
+            </div>
+            <div class="progress-container">
+                <div class="progress-bar">
+                    <div id="progress-fill" class="progress-fill"></div>
+                </div>
+                <span id="progress-percent" class="progress-percent">0%</span>
+            </div>
         </div>
 
         <div class="visualizer-container">
@@ -857,6 +917,19 @@ class PracticeMode {
     getStreakToAdvance() {
         return 10;
     }
+
+    /**
+     * Get current progress toward level completion as a percentage (0-100)
+     * Default implementation based on streak-to-advance.
+     * Modes can override for different progress calculations.
+     * @param {Object} stats - Current stats object { streak, correct, total, level }
+     * @param {Object} levelConfig - Current level configuration
+     * @returns {number} Progress percentage (0-100)
+     */
+    getProgressPercent(stats, levelConfig) {
+        const target = this.getStreakToAdvance();
+        return Math.min(100, Math.round((stats.streak / target) * 100));
+    }
 }
 
 /**
@@ -1018,9 +1091,10 @@ class App {
         this.dom = {
             keypad: document.getElementById('keypad'),
             msg: document.getElementById('message'),
-            streak: document.getElementById('streak-display'),
-            acc: document.getElementById('acc-display'),
             level: document.getElementById('level-display'),
+            levelName: document.getElementById('level-name-display'),
+            progressFill: document.getElementById('progress-fill'),
+            progressPercent: document.getElementById('progress-percent'),
             replay: document.getElementById('replay-btn'),
             modeSelectOverlay: document.getElementById('mode-select-overlay'),
             modeList: document.getElementById('mode-list'),
@@ -1204,7 +1278,11 @@ class App {
         this.mode = null;
         this.currentChallenge = null;
         this.stats = { streak: 0, correct: 0, total: 0, level: 1 };
-        this.updateStats();
+
+        // Reset progress display
+        this.dom.progressFill.style.width = '0%';
+        this.dom.progressPercent.textContent = '0%';
+        this.dom.levelName.textContent = '—';
 
         // Disable all keys
         document.querySelectorAll('.key').forEach(k => k.classList.add('disabled'));
@@ -1249,7 +1327,9 @@ class App {
         this.currentLevelIndex = index;
         this.currentLevelConfig = levels[index];
         this.stats.level = index + 1;
+        this.stats.streak = 0; // Reset streak when loading a new level
         this.dom.level.textContent = this.stats.level;
+        this.dom.levelName.textContent = this.currentLevelConfig.name;
 
         // Let the mode do any level-specific setup
         this.mode.onLevelStart(this.currentLevelConfig);
@@ -1257,6 +1337,9 @@ class App {
         // Get enabled keys from the mode
         this.enabledKeys = this.mode.getEnabledKeys(this.currentLevelConfig);
         this.updateKeypadState();
+
+        // Update progress display
+        this.updateProgress(false);
 
         this.setMessage(`Level ${this.stats.level}: ${this.currentLevelConfig.name}`, "neutral");
         this.nextRound();
@@ -1312,6 +1395,7 @@ class App {
             this.stats.streak++;
             this.feedback(btn, 'correct');
             this.setMessage("Correct!", "correct");
+            this.updateProgress(true);
 
             // Check for level advancement
             const streakToAdvance = this.mode.getStreakToAdvance();
@@ -1330,6 +1414,7 @@ class App {
             this.stats.streak = 0;
             this.feedback(btn, 'wrong');
             this.setMessage(`Wrong! Listen to the difference...`, "wrong");
+            this.updateProgress(false); // Quick reset animation
 
             this.isPlayingSequence = true;
             setTimeout(() => {
@@ -1376,9 +1461,27 @@ class App {
     }
 
     updateStats() {
-        this.dom.streak.textContent = this.stats.streak;
-        const acc = this.stats.total === 0 ? 100 : Math.round((this.stats.correct / this.stats.total) * 100);
-        this.dom.acc.textContent = acc + "%";
+        const percent = this.mode.getProgressPercent(this.stats, this.currentLevelConfig);
+        this.dom.progressFill.style.width = percent + '%';
+        this.dom.progressPercent.textContent = percent + '%';
+    }
+
+    updateProgress(animate = true) {
+        const percent = this.mode.getProgressPercent(this.stats, this.currentLevelConfig);
+
+        if (!animate) {
+            this.dom.progressFill.classList.add('reset');
+        }
+
+        this.dom.progressFill.style.width = percent + '%';
+        this.dom.progressPercent.textContent = percent + '%';
+
+        if (!animate) {
+            // Remove reset class after transition completes
+            setTimeout(() => {
+                this.dom.progressFill.classList.remove('reset');
+            }, 150);
+        }
     }
 
     feedback(btnElement, type) {
