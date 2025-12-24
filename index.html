@@ -473,8 +473,11 @@ class AudioManager {
         this.isPlaying = false;
     }
 
-    playTone(rowFreq, colFreq, duration = 1.2) {
+    playTone(rowFreq, colFreq) {
         if (!this.ctx) this.init();
+
+        // might want to make this configurable in the future
+        const TONE_STYLE = "phone";
 
         // Stop any currently playing tone first
         this.stopCurrentTone();
@@ -496,10 +499,25 @@ class AudioManager {
         osc2.type = 'sine';
         osc2.frequency.setValueAtTime(colFreq, startTime);
 
-        // Envelope for smoother sound
-        toneGain.gain.setValueAtTime(0, startTime);
-        toneGain.gain.linearRampToValueAtTime(1, startTime + 0.02); // Attack
-        toneGain.gain.exponentialRampToValueAtTime(0.001, startTime + duration); // Decay
+        let duration;
+
+        if (TONE_STYLE === 'phone') {
+            // Envelope: quick attack, flat sustain, quick release (like real DTMF)
+            duration = .58;
+            toneGain.gain.setValueAtTime(0, startTime);
+            toneGain.gain.linearRampToValueAtTime(1, startTime + 0.005); // Very quick attack
+            toneGain.gain.setValueAtTime(1, startTime + duration - 0.02); // Hold flat until near end
+            toneGain.gain.linearRampToValueAtTime(0, startTime + duration); // Quick release
+
+        } else if (TONE_STYLE === "piano") {
+            // Envelope for smoother sound
+            duration = 1.2;
+            toneGain.gain.setValueAtTime(0, startTime);
+            toneGain.gain.linearRampToValueAtTime(1, startTime + 0.02); // Attack
+            toneGain.gain.exponentialRampToValueAtTime(0.001, startTime + duration); // Decay
+        } else {
+            console.error("unknown tone style");
+        }
 
         osc1.connect(toneGain);
         osc2.connect(toneGain);
