@@ -422,8 +422,10 @@ class AudioManager {
     constructor() {
         this.ctx = null;
         this.analyser = null;
-        this.gainNode = null;
+        this.masterGain = null;
         this.isPlaying = false;
+        this.currentToneNodes = null; // { osc1, osc2, gainNode }
+        this.playbackTimeout = null;
     }
 
     init() {
@@ -432,47 +434,90 @@ class AudioManager {
             this.ctx = new AudioContext();
             this.analyser = this.ctx.createAnalyser();
             this.analyser.fftSize = 2048;
-            this.gainNode = this.ctx.createGain();
-            this.gainNode.connect(this.analyser);
+            this.masterGain = this.ctx.createGain();
+            this.masterGain.gain.value = 0.3;
+            this.masterGain.connect(this.analyser);
             this.analyser.connect(this.ctx.destination);
-            this.gainNode.gain.value = 0.3; // Default volume
         }
         if (this.ctx.state === 'suspended') {
             this.ctx.resume();
         }
     }
 
+    stopCurrentTone() {
+        if (this.playbackTimeout) {
+            clearTimeout(this.playbackTimeout);
+            this.playbackTimeout = null;
+        }
+
+        if (this.currentToneNodes) {
+            const { osc1, osc2, gainNode } = this.currentToneNodes;
+            const t = this.ctx.currentTime;
+
+            // Quick fade out on this tone's gain node
+            gainNode.gain.cancelScheduledValues(t);
+            gainNode.gain.setValueAtTime(gainNode.gain.value, t);
+            gainNode.gain.linearRampToValueAtTime(0, t + 0.02);
+
+            // Schedule stop after fade
+            try {
+                osc1.stop(t + 0.025);
+                osc2.stop(t + 0.025);
+            } catch (e) {
+                // Already stopped
+            }
+
+            this.currentToneNodes = null;
+        }
+
+        this.isPlaying = false;
+    }
+
     playTone(rowFreq, colFreq, duration = 1.2) {
         if (!this.ctx) this.init();
 
+        // Stop any currently playing tone first
+        this.stopCurrentTone();
+
         const t = this.ctx.currentTime;
+        const startTime = t + 0.03; // Small delay to let previous tone fade
+
+        // Create a dedicated gain node for this tone
+        const toneGain = this.ctx.createGain();
+        toneGain.connect(this.masterGain);
 
         // Oscillator 1: Low Frequency
         const osc1 = this.ctx.createOscillator();
         osc1.type = 'sine';
-        osc1.frequency.setValueAtTime(rowFreq, t);
+        osc1.frequency.setValueAtTime(rowFreq, startTime);
 
         // Oscillator 2: High Frequency
         const osc2 = this.ctx.createOscillator();
         osc2.type = 'sine';
-        osc2.frequency.setValueAtTime(colFreq, t);
+        osc2.frequency.setValueAtTime(colFreq, startTime);
 
-        // Envelope for smoother sound (like a keypad)
-        this.gainNode.gain.cancelScheduledValues(t);
-        this.gainNode.gain.setValueAtTime(0, t);
-        this.gainNode.gain.linearRampToValueAtTime(0.5, t + 0.02); // Attack
-        this.gainNode.gain.exponentialRampToValueAtTime(0.001, t + duration); // Decay
+        // Envelope for smoother sound
+        toneGain.gain.setValueAtTime(0, startTime);
+        toneGain.gain.linearRampToValueAtTime(1, startTime + 0.02); // Attack
+        toneGain.gain.exponentialRampToValueAtTime(0.001, startTime + duration); // Decay
 
-        osc1.connect(this.gainNode);
-        osc2.connect(this.gainNode);
+        osc1.connect(toneGain);
+        osc2.connect(toneGain);
 
-        osc1.start(t);
-        osc2.start(t);
-        osc1.stop(t + duration);
-        osc2.stop(t + duration);
+        osc1.start(startTime);
+        osc2.start(startTime);
+        osc1.stop(startTime + duration);
+        osc2.stop(startTime + duration);
+
+        // Track current tone
+        this.currentToneNodes = { osc1, osc2, gainNode: toneGain };
 
         this.isPlaying = true;
-        setTimeout(() => { this.isPlaying = false; }, duration * 1000);
+        this.playbackTimeout = setTimeout(() => {
+            this.isPlaying = false;
+            this.currentToneNodes = null;
+            this.playbackTimeout = null;
+        }, (duration + 0.03) * 1000);
     }
 
     getFrequencyData(array) {
@@ -553,7 +598,7 @@ class App {
         });
 
         this.dom.replay.addEventListener('click', () => {
-            if (this.currentTone && !this.isPlayingSequence) {
+            if (this.currentTone && !this.isPlayingSequence && !this.audio.isPlaying) {
                 this.playCurrentTone();
                 this.setMessage("Replaying...", "neutral");
             }
@@ -721,6 +766,7 @@ class App {
 
     handleInput(inputKey) {
         if (this.isPlayingSequence) return;
+        if (this.audio.isPlaying) return; // Block input while tone is playing
 
         const btn = document.querySelector(`.key[data-key="${inputKey}"]`);
         if (btn && btn.classList.contains('disabled')) return;
@@ -753,6 +799,9 @@ class App {
             this.stats.streak = 0;
             this.feedback(btn, 'wrong');
             this.setMessage(`Wrong! Listen to the difference...`, "wrong");
+
+            // Block replay/input immediately
+            this.isPlayingSequence = true;
 
             // Start comparison playback after a brief pause
             setTimeout(() => {
