@@ -249,9 +249,10 @@
         /* Frequency Labels (Visual Aid) */
         .freq-labels.col-labels {
             display: grid;
-            grid-template-columns: 45px repeat(4, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: var(--grid-gap);
-            padding: 0 20px;
+            /* Align with keypad columns */
+            padding: 0 40px 0 48px;
             margin-bottom: 5px;
         }
 
@@ -376,7 +377,6 @@
 
         <div class="freq-labels col-labels">
             <!-- Column Freq Labels (High frequencies) - above keypad -->
-            <div class="freq-label"></div><!-- spacer for row labels -->
             <div class="freq-label">1209Hz</div>
             <div class="freq-label">1336Hz</div>
             <div class="freq-label">1477Hz</div>
