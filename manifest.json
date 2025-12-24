@@ -1,0 +1,22 @@
+{
+  "short_name": "freq out",
+  "name": "freq out | DTMF trainer",
+  "description": "Master the tones of the telephone keypad through ear training.",
+  "icons": [
+    {
+      "src": "./icon/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "./icon/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "./index.html",
+  "background_color": "#121214",
+  "display": "standalone",
+  "scope": "./",
+  "theme_color": "#00ff9d"
+}

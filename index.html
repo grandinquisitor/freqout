@@ -3,7 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DTMF Ear Trainer | Master the Tones</title>
+    <title>Freq Out | DTMF: Master the Tones</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#00ff9d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="./icon/icon-192.png">
     <style>
         :root {
             --bg-color: #121214;
@@ -828,6 +833,12 @@ class App {
 
 // Start the App when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
+    // Register Service Worker for PWA
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./sw.js')
+            .then(() => console.log("Service Worker Registered"));
+    }
+
     const app = new App();
 });
 
