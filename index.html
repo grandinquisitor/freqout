@@ -251,6 +251,13 @@
             box-shadow: 0 0 20px var(--error);
         }
 
+        /* Free play mode - key active state */
+        .key.key-active {
+            background: var(--primary) !important;
+            color: #000 !important;
+            box-shadow: 0 0 20px var(--primary);
+        }
+
         /* Frequency Labels (Visual Aid) */
         .freq-labels.col-labels {
             display: grid;
@@ -292,32 +299,218 @@
             font-family: monospace;
         }
 
-        /* --- Overlay --- */
-        #start-overlay {
+        /* --- Mode Select Overlay --- */
+        #mode-select-overlay {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(18, 18, 20, 0.95);
+            background: rgba(18, 18, 20, 0.98);
             backdrop-filter: blur(5px);
             z-index: 100;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
             padding: 20px;
-            text-align: center;
+            overflow-y: auto;
         }
 
-        .overlay-content h2 {
-            font-size: 2rem;
-            margin-bottom: 1rem;
+        .mode-select-container {
+            width: 100%;
+            max-width: 500px;
+            padding-top: 40px;
+        }
+
+        .mode-select-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .mode-select-header h1 {
+            font-size: 2.2rem;
+            margin-bottom: 8px;
+        }
+
+        .mode-select-header p {
+            color: var(--text-muted);
+            font-size: 1rem;
+        }
+
+        /* Mode Card */
+        .mode-card {
+            background: var(--panel-bg);
+            border-radius: 16px;
+            margin-bottom: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .mode-card.expanded {
+            border-color: var(--primary);
+            box-shadow: 0 0 20px rgba(0, 255, 157, 0.1);
+        }
+
+        .mode-card-header {
+            padding: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            transition: background 0.2s;
+        }
+
+        .mode-card-header:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .mode-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            background: var(--btn-bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            flex-shrink: 0;
+        }
+
+        .mode-info {
+            flex: 1;
+        }
+
+        .mode-info h3 {
+            font-size: 1.1rem;
+            margin-bottom: 4px;
+            color: var(--text-main);
+        }
+
+        .mode-info p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+
+        .mode-expand-icon {
+            color: var(--text-muted);
+            transition: transform 0.3s;
+        }
+
+        .mode-card.expanded .mode-expand-icon {
+            transform: rotate(180deg);
+        }
+
+        /* Level List */
+        .level-list {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .mode-card.expanded .level-list {
+            max-height: 500px;
+        }
+
+        .level-item {
+            padding: 14px 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: all 0.2s;
+        }
+
+        .level-item:hover {
+            background: rgba(0, 255, 157, 0.05);
+        }
+
+        .level-item:active {
+            background: rgba(0, 255, 157, 0.1);
+        }
+
+        .level-number {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--btn-bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            font-weight: 600;
             color: var(--primary);
         }
 
-        .overlay-content p {
-            max-width: 400px;
-            margin-bottom: 2rem;
-            line-height: 1.6;
-            color: #ccc;
+        .level-info {
+            flex: 1;
+        }
+
+        .level-info h4 {
+            font-size: 0.95rem;
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+
+        .level-info span {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .level-play-icon {
+            color: var(--primary);
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .level-item:hover .level-play-icon {
+            opacity: 1;
+        }
+
+        /* Quick Start Button for simple modes */
+        .quick-start-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 14px 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            background: rgba(0, 255, 157, 0.1);
+            color: var(--primary);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .quick-start-btn:hover {
+            background: rgba(0, 255, 157, 0.15);
+        }
+
+        /* Back Button */
+        .back-btn {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 50;
+            background: var(--panel-bg);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-main);
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+
+        .back-btn:hover {
+            background: var(--btn-hover);
+        }
+
+        .back-btn.hidden {
+            display: none;
         }
 
         .level-badge {
@@ -345,15 +538,26 @@
 </head>
 <body>
 
-    <div id="start-overlay">
-        <div class="overlay-content">
-            <h2>DTMF Master</h2>
-            <p>Train your ear to recognize telephone tones. <br>We'll break down the low and high frequencies separately before combining them.</p>
-            <button id="start-btn" class="action-btn primary">
-                Start Training
-            </button>
+    <!-- Mode Selection Overlay -->
+    <div id="mode-select-overlay">
+        <div class="mode-select-container">
+            <div class="mode-select-header">
+                <h1>Freq Out</h1>
+                <p>Choose your training mode</p>
+            </div>
+            <div id="mode-list">
+                <!-- Generated by JS -->
+            </div>
         </div>
     </div>
+
+    <!-- Back Button (shown during gameplay) -->
+    <button id="back-btn" class="back-btn hidden">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+        </svg>
+        Modes
+    </button>
 
     <div class="app-container">
         <header>
@@ -575,8 +779,17 @@ class PracticeMode {
     /** @returns {string} Display name for the mode */
     get name() { throw new Error('Must implement name getter'); }
 
-    /** @returns {string} Description shown in overlay */
+    /** @returns {string} Description shown in mode selection */
     get description() { throw new Error('Must implement description getter'); }
+
+    /** @returns {string} Icon/emoji for the mode */
+    get icon() { return '🎵'; }
+
+    /** @returns {boolean} Whether this mode has levels to select */
+    get hasLevels() { return true; }
+
+    /** @returns {boolean} Whether this is a game mode (has challenges) */
+    get isGameMode() { return true; }
 
     /** @returns {Array} Level configurations for this mode */
     getLevels() { throw new Error('Must implement getLevels()'); }
@@ -656,17 +869,18 @@ class PracticeMode {
 class DTMFIdentifyMode extends PracticeMode {
     get id() { return 'dtmf-identify'; }
     get name() { return 'DTMF Identify'; }
+    get icon() { return '📞'; }
     get description() {
-        return 'Train your ear to recognize telephone tones. We\'ll break down the low and high frequencies separately before combining them.';
+        return 'Train your ear to recognize telephone tones';
     }
 
     getLevels() {
         return [
-            { name: "Low Freqs (Rows)", type: 'row', activeIndices: [0, 1, 2, 3], subsetSize: 2 },
-            { name: "High Freqs (Cols)", type: 'col', activeIndices: [0, 1, 2, 3], subsetSize: 2 },
-            { name: "Basic Mix", type: 'full', keys: ['1','2','3','4','5','6'] },
-            { name: "Standard Pad", type: 'full', keys: ['1','2','3','4','5','6','7','8','9','0','*','#'] },
-            { name: "Master (All 16)", type: 'full', keys: ['1','2','3','4','5','6','7','8','9','0','*','#','A','B','C','D'] }
+            { name: "Low Freqs (Rows)", type: 'row', activeIndices: [0, 1, 2, 3], subsetSize: 2, description: "Learn the 4 row frequencies" },
+            { name: "High Freqs (Cols)", type: 'col', activeIndices: [0, 1, 2, 3], subsetSize: 2, description: "Learn the 4 column frequencies" },
+            { name: "Basic Mix", type: 'full', keys: ['1','2','3','4','5','6'], description: "Numbers 1-6" },
+            { name: "Standard Pad", type: 'full', keys: ['1','2','3','4','5','6','7','8','9','0','*','#'], description: "All standard keys" },
+            { name: "Master (All 16)", type: 'full', keys: ['1','2','3','4','5','6','7','8','9','0','*','#','A','B','C','D'], description: "Including A, B, C, D" }
         ];
     }
 
@@ -711,6 +925,37 @@ class DTMFIdentifyMode extends PracticeMode {
 
 /**
  * ============================================================================
+ * FREE PLAY MODE
+ * Non-game mode - just play tones on the keypad
+ * ============================================================================
+ */
+
+class FreePlayMode extends PracticeMode {
+    get id() { return 'free-play'; }
+    get name() { return 'Free Play'; }
+    get icon() { return '🎹'; }
+    get description() {
+        return 'Explore DTMF tones freely on the keypad';
+    }
+    get hasLevels() { return false; }
+    get isGameMode() { return false; }
+
+    getLevels() {
+        return [{ name: "Free Play", type: 'free', keys: KEYPAD_LAYOUT.map(k => k.key) }];
+    }
+
+    getEnabledKeys(levelConfig) {
+        return KEYPAD_LAYOUT.map(k => k.key);
+    }
+
+    generateChallenge(enabledKeys, levelConfig) {
+        // No challenge in free play mode
+        return null;
+    }
+}
+
+/**
+ * ============================================================================
  * MODE REGISTRY
  * Register all available practice modes here
  * ============================================================================
@@ -743,10 +988,7 @@ const ModeRegistry = {
 
 // Register available modes
 ModeRegistry.register(DTMFIdentifyMode);
-
-// Future modes would be registered like:
-// ModeRegistry.register(DTMFSequenceMode);
-// ModeRegistry.register(DTMFDecodeMode);
+ModeRegistry.register(FreePlayMode);
 
 /**
  * ============================================================================
@@ -764,6 +1006,7 @@ class App {
         this.currentLevelConfig = null;
         this.enabledKeys = [];
         this.isPlayingSequence = false;
+        this.expandedModeId = null;
 
         this.stats = {
             streak: 0,
@@ -779,8 +1022,9 @@ class App {
             acc: document.getElementById('acc-display'),
             level: document.getElementById('level-display'),
             replay: document.getElementById('replay-btn'),
-            startOverlay: document.getElementById('start-overlay'),
-            startBtn: document.getElementById('start-btn'),
+            modeSelectOverlay: document.getElementById('mode-select-overlay'),
+            modeList: document.getElementById('mode-list'),
+            backBtn: document.getElementById('back-btn'),
             canvas: document.getElementById('visualizer')
         };
 
@@ -789,26 +1033,181 @@ class App {
 
     init() {
         this.renderKeypad();
+        this.renderModeSelect();
         this.setupEventListeners();
         this.startVisualizer();
-
-        // Load default mode
-        this.setMode(ModeRegistry.getDefault(this.audio));
     }
 
-    /**
-     * Switch to a different practice mode
-     */
-    setMode(mode) {
-        this.mode = mode;
-        this.currentLevelIndex = 0;
+    renderModeSelect() {
+        const modes = ModeRegistry.getAll(this.audio);
+        this.dom.modeList.innerHTML = '';
+
+        modes.forEach(mode => {
+            const card = document.createElement('div');
+            card.className = 'mode-card';
+            card.dataset.modeId = mode.id;
+
+            let levelListHtml = '';
+            if (mode.hasLevels) {
+                const levels = mode.getLevels();
+                levelListHtml = `
+                    <div class="level-list">
+                        ${levels.map((level, idx) => `
+                            <div class="level-item" data-level-index="${idx}">
+                                <div class="level-number">${idx + 1}</div>
+                                <div class="level-info">
+                                    <h4>${level.name}</h4>
+                                    <span>${level.description || ''}</span>
+                                </div>
+                                <svg class="level-play-icon" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M8 5v14l11-7z"/>
+                                </svg>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } else {
+                levelListHtml = `
+                    <div class="level-list">
+                        <div class="quick-start-btn" data-level-index="0">
+                            <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M8 5v14l11-7z"/>
+                            </svg>
+                            Start Playing
+                        </div>
+                    </div>
+                `;
+            }
+
+            card.innerHTML = `
+                <div class="mode-card-header">
+                    <div class="mode-icon">${mode.icon}</div>
+                    <div class="mode-info">
+                        <h3>${mode.name}</h3>
+                        <p>${mode.description}</p>
+                    </div>
+                    <svg class="mode-expand-icon" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path d="M6 9l6 6 6-6"/>
+                    </svg>
+                </div>
+                ${levelListHtml}
+            `;
+
+            this.dom.modeList.appendChild(card);
+        });
+    }
+
+    setupEventListeners() {
+        // Mode card header clicks (expand/collapse)
+        this.dom.modeList.addEventListener('click', (e) => {
+            const header = e.target.closest('.mode-card-header');
+            const levelItem = e.target.closest('.level-item');
+            const quickStart = e.target.closest('.quick-start-btn');
+
+            if (header) {
+                const card = header.closest('.mode-card');
+                const modeId = card.dataset.modeId;
+
+                // Toggle expansion
+                if (this.expandedModeId === modeId) {
+                    card.classList.remove('expanded');
+                    this.expandedModeId = null;
+                } else {
+                    // Collapse any other expanded card
+                    document.querySelectorAll('.mode-card.expanded').forEach(c => c.classList.remove('expanded'));
+                    card.classList.add('expanded');
+                    this.expandedModeId = modeId;
+                }
+            } else if (levelItem || quickStart) {
+                const item = levelItem || quickStart;
+                const card = item.closest('.mode-card');
+                const modeId = card.dataset.modeId;
+                const levelIndex = parseInt(item.dataset.levelIndex, 10);
+
+                this.startMode(modeId, levelIndex);
+            }
+        });
+
+        // Back button
+        this.dom.backBtn.addEventListener('click', () => {
+            this.showModeSelect();
+        });
+
+        // Replay button
+        this.dom.replay.addEventListener('click', () => {
+            if (this.mode && this.mode.isGameMode && this.currentChallenge && !this.isPlayingSequence && !this.audio.isPlaying) {
+                this.currentChallenge.playChallenge();
+                this.setMessage("Replaying...", "neutral");
+            }
+        });
+
+        // Keyboard support
+        document.addEventListener('keydown', (e) => {
+            if (this.dom.modeSelectOverlay.style.display !== 'none') return;
+            if (this.isPlayingSequence) return;
+
+            const key = e.key.toUpperCase();
+            if (KEYPAD_LAYOUT.find(k => k.key === key)) {
+                this.handleInput(key);
+                // Visual press effect
+                const btn = document.querySelector(`.key[data-key="${key}"]`);
+                if (btn && !btn.classList.contains('disabled')) {
+                    btn.classList.add('key-active');
+                    setTimeout(() => btn.classList.remove('key-active'), 150);
+                }
+            } else if (e.code === 'Space' && this.mode && this.mode.isGameMode) {
+                this.dom.replay.click();
+            } else if (e.code === 'Escape') {
+                this.showModeSelect();
+            }
+        });
+    }
+
+    startMode(modeId, levelIndex) {
+        this.audio.init();
+        this.mode = ModeRegistry.get(modeId, this.audio);
+        this.dom.modeSelectOverlay.style.display = 'none';
+        this.dom.backBtn.classList.remove('hidden');
+
+        // Update header based on mode
+        document.querySelector('header h1').textContent = this.mode.name;
+        document.querySelector('header .subtitle').textContent = this.mode.isGameMode
+            ? 'Identify the tones you hear'
+            : 'Tap keys to play tones';
+
+        // Show/hide game-specific UI
+        const statsBar = document.querySelector('.stats-bar');
+        const controlArea = document.querySelector('.control-area');
+
+        if (this.mode.isGameMode) {
+            statsBar.style.display = 'flex';
+            controlArea.style.display = 'flex';
+            this.loadLevel(levelIndex);
+        } else {
+            statsBar.style.display = 'none';
+            controlArea.style.display = 'none';
+            this.startFreePlay();
+        }
+    }
+
+    startFreePlay() {
+        // Enable all keys
+        this.enabledKeys = KEYPAD_LAYOUT.map(k => k.key);
+        this.updateKeypadState();
+    }
+
+    showModeSelect() {
+        this.dom.modeSelectOverlay.style.display = 'flex';
+        this.dom.backBtn.classList.add('hidden');
+
+        // Reset state
+        this.mode = null;
+        this.currentChallenge = null;
         this.stats = { streak: 0, correct: 0, total: 0, level: 1 };
         this.updateStats();
 
-        // Update overlay text for the mode
-        const overlayContent = this.dom.startOverlay.querySelector('.overlay-content');
-        overlayContent.querySelector('h2').textContent = mode.name;
-        overlayContent.querySelector('p').innerHTML = mode.description;
+        // Disable all keys
+        document.querySelectorAll('.key').forEach(k => k.classList.add('disabled'));
     }
 
     renderKeypad() {
@@ -825,41 +1224,21 @@ class App {
             btn.innerHTML = html;
 
             btn.addEventListener('click', () => this.handleInput(k.key));
-            this.dom.keypad.appendChild(btn);
-        });
-    }
 
-    setupEventListeners() {
-        this.dom.startBtn.addEventListener('click', () => {
-            this.audio.init();
-            this.dom.startOverlay.style.display = 'none';
-            this.loadLevel(0);
-        });
-
-        this.dom.replay.addEventListener('click', () => {
-            if (this.currentChallenge && !this.isPlayingSequence && !this.audio.isPlaying) {
-                this.currentChallenge.playChallenge();
-                this.setMessage("Replaying...", "neutral");
-            }
-        });
-
-        // Keyboard support
-        document.addEventListener('keydown', (e) => {
-            if (this.dom.startOverlay.style.display !== 'none') return;
-            if (this.isPlayingSequence) return; // Block input during comparison playback
-            const key = e.key.toUpperCase();
-            // Check if key exists in layout
-            if (KEYPAD_LAYOUT.find(k => k.key === key)) {
-                this.handleInput(key);
-                // Visual press effect
-                const btn = document.querySelector(`.key[data-key="${key}"]`);
-                if(btn) {
-                    btn.style.background = 'var(--btn-active)';
-                    setTimeout(() => btn.style.background = '', 100);
+            // Touch events for better mobile experience
+            btn.addEventListener('touchstart', (e) => {
+                if (!btn.classList.contains('disabled')) {
+                    btn.classList.add('key-active');
                 }
-            } else if (e.code === 'Space') {
-                this.dom.replay.click();
-            }
+            });
+            btn.addEventListener('touchend', () => {
+                btn.classList.remove('key-active');
+            });
+            btn.addEventListener('touchcancel', () => {
+                btn.classList.remove('key-active');
+            });
+
+            this.dom.keypad.appendChild(btn);
         });
     }
 
@@ -902,16 +1281,27 @@ class App {
 
         // Play the challenge after a short delay
         setTimeout(() => {
-            this.currentChallenge.playChallenge();
+            if (this.currentChallenge) {
+                this.currentChallenge.playChallenge();
+            }
         }, 500);
     }
 
     handleInput(inputKey) {
         if (this.isPlayingSequence) return;
-        if (this.audio.isPlaying) return; // Block input while tone is playing
+        if (this.audio.isPlaying && this.mode && this.mode.isGameMode) return;
 
         const btn = document.querySelector(`.key[data-key="${inputKey}"]`);
         if (btn && btn.classList.contains('disabled')) return;
+
+        // Free play mode - just play the tone
+        if (this.mode && !this.mode.isGameMode) {
+            this.audio.playToneForKey(inputKey);
+            return;
+        }
+
+        // Game mode logic
+        if (!this.mode || !this.currentChallenge) return;
 
         this.stats.total++;
 
