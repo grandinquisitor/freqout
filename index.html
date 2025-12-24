@@ -404,7 +404,9 @@
 
 <script>
 /**
- * DTMF Logic & Application State
+ * ============================================================================
+ * DTMF CONSTANTS & KEYPAD LAYOUT
+ * ============================================================================
  */
 
 // DTMF Frequencies
@@ -538,6 +540,16 @@ class AudioManager {
         }, (duration + 0.03) * 1000);
     }
 
+    /**
+     * Play a DTMF tone for a specific key character
+     */
+    playToneForKey(keyChar) {
+        const keyObj = KEYPAD_LAYOUT.find(k => k.key === keyChar);
+        if (keyObj) {
+            this.playTone(ROW_FREQS[keyObj.row], COL_FREQS[keyObj.col]);
+        }
+    }
+
     getFrequencyData(array) {
         if (this.analyser) {
             this.analyser.getByteFrequencyData(array);
@@ -545,28 +557,220 @@ class AudioManager {
     }
 }
 
+/**
+ * ============================================================================
+ * PRACTICE MODE INTERFACE
+ * Base class that defines the contract for all practice modes
+ * ============================================================================
+ */
+
+class PracticeMode {
+    constructor(audio) {
+        this.audio = audio;
+    }
+
+    /** @returns {string} Mode identifier */
+    get id() { throw new Error('Must implement id getter'); }
+
+    /** @returns {string} Display name for the mode */
+    get name() { throw new Error('Must implement name getter'); }
+
+    /** @returns {string} Description shown in overlay */
+    get description() { throw new Error('Must implement description getter'); }
+
+    /** @returns {Array} Level configurations for this mode */
+    getLevels() { throw new Error('Must implement getLevels()'); }
+
+    /**
+     * Get which keys should be enabled for a given level
+     * @param {Object} levelConfig - The level configuration object
+     * @returns {Array<string>} Array of key characters to enable
+     */
+    getEnabledKeys(levelConfig) { throw new Error('Must implement getEnabledKeys()'); }
+
+    /**
+     * Generate a new challenge for the current level
+     * @param {Array<string>} enabledKeys - Currently enabled key characters
+     * @param {Object} levelConfig - The level configuration object
+     * @returns {Object} Challenge object with { targetKey, playChallenge() }
+     */
+    generateChallenge(enabledKeys, levelConfig) { throw new Error('Must implement generateChallenge()'); }
+
+    /**
+     * Check if the user's input is correct
+     * @param {string} inputKey - The key the user pressed
+     * @param {Object} challenge - The current challenge object
+     * @returns {boolean} Whether the answer is correct
+     */
+    checkAnswer(inputKey, challenge) {
+        return inputKey === challenge.targetKey;
+    }
+
+    /**
+     * Get the comparison sequence to play after a wrong answer
+     * @param {string} wrongKey - The incorrect key pressed
+     * @param {string} correctKey - The correct key
+     * @returns {Array} Sequence of { key, type: 'wrong'|'correct', label }
+     */
+    getComparisonSequence(wrongKey, correctKey) {
+        return [
+            { key: wrongKey, type: 'wrong', label: `Your answer: ${wrongKey}` },
+            { key: correctKey, type: 'correct', label: `Correct: ${correctKey}` },
+            { key: wrongKey, type: 'wrong', label: `Your answer: ${wrongKey}` },
+            { key: correctKey, type: 'correct', label: `Correct: ${correctKey}` },
+        ];
+    }
+
+    /**
+     * Play the tone for a given key (used in comparison sequences)
+     * @param {string} keyChar - The key to play
+     */
+    playKeyTone(keyChar) {
+        this.audio.playToneForKey(keyChar);
+    }
+
+    /**
+     * Called when entering a new level - can be used for mode-specific setup
+     * @param {Object} levelConfig - The level configuration
+     */
+    onLevelStart(levelConfig) {
+        // Override if needed
+    }
+
+    /**
+     * Get the number of correct answers needed to advance to next level
+     * @returns {number}
+     */
+    getStreakToAdvance() {
+        return 10;
+    }
+}
+
+/**
+ * ============================================================================
+ * DTMF IDENTIFY MODE
+ * The original practice mode - identify single DTMF tones
+ * ============================================================================
+ */
+
+class DTMFIdentifyMode extends PracticeMode {
+    get id() { return 'dtmf-identify'; }
+    get name() { return 'DTMF Identify'; }
+    get description() {
+        return 'Train your ear to recognize telephone tones. We\'ll break down the low and high frequencies separately before combining them.';
+    }
+
+    getLevels() {
+        return [
+            { name: "Low Freqs (Rows)", type: 'row', activeIndices: [0, 1, 2, 3], subsetSize: 2 },
+            { name: "High Freqs (Cols)", type: 'col', activeIndices: [0, 1, 2, 3], subsetSize: 2 },
+            { name: "Basic Mix", type: 'full', keys: ['1','2','3','4','5','6'] },
+            { name: "Standard Pad", type: 'full', keys: ['1','2','3','4','5','6','7','8','9','0','*','#'] },
+            { name: "Master (All 16)", type: 'full', keys: ['1','2','3','4','5','6','7','8','9','0','*','#','A','B','C','D'] }
+        ];
+    }
+
+    getEnabledKeys(levelConfig) {
+        if (levelConfig.type === 'row') {
+            // Enable first column keys to represent row frequencies
+            return levelConfig.activeIndices.map(rowIdx => {
+                const keyObj = KEYPAD_LAYOUT.find(k => k.row === rowIdx && k.col === 0);
+                return keyObj?.key;
+            }).filter(Boolean);
+        } else if (levelConfig.type === 'col') {
+            // Enable first row keys to represent column frequencies
+            return levelConfig.activeIndices.map(colIdx => {
+                const keyObj = KEYPAD_LAYOUT.find(k => k.col === colIdx && k.row === 0);
+                return keyObj?.key;
+            }).filter(Boolean);
+        } else if (levelConfig.type === 'full') {
+            return levelConfig.keys;
+        }
+        return [];
+    }
+
+    generateChallenge(enabledKeys, levelConfig) {
+        // Pick a random enabled key
+        const targetKey = enabledKeys[Math.floor(Math.random() * enabledKeys.length)];
+        const keyObj = KEYPAD_LAYOUT.find(k => k.key === targetKey);
+
+        const challenge = {
+            targetKey,
+            row: keyObj.row,
+            col: keyObj.col,
+            playChallenge: () => {
+                const rowFreq = ROW_FREQS[keyObj.row];
+                const colFreq = COL_FREQS[keyObj.col];
+                this.audio.playTone(rowFreq, colFreq);
+            }
+        };
+
+        return challenge;
+    }
+}
+
+/**
+ * ============================================================================
+ * MODE REGISTRY
+ * Register all available practice modes here
+ * ============================================================================
+ */
+
+const ModeRegistry = {
+    modes: {},
+
+    register(ModeClass) {
+        // Create a temporary instance to get the id
+        const tempInstance = new ModeClass(null);
+        this.modes[tempInstance.id] = ModeClass;
+    },
+
+    get(id, audio) {
+        const ModeClass = this.modes[id];
+        if (!ModeClass) throw new Error(`Unknown mode: ${id}`);
+        return new ModeClass(audio);
+    },
+
+    getAll(audio) {
+        return Object.keys(this.modes).map(id => this.get(id, audio));
+    },
+
+    getDefault(audio) {
+        const firstId = Object.keys(this.modes)[0];
+        return this.get(firstId, audio);
+    }
+};
+
+// Register available modes
+ModeRegistry.register(DTMFIdentifyMode);
+
+// Future modes would be registered like:
+// ModeRegistry.register(DTMFSequenceMode);
+// ModeRegistry.register(DTMFDecodeMode);
+
+/**
+ * ============================================================================
+ * APP CLASS
+ * Main application controller - manages UI and delegates to current mode
+ * ============================================================================
+ */
+
 class App {
     constructor() {
         this.audio = new AudioManager();
+        this.mode = null;
+        this.currentChallenge = null;
+        this.currentLevelIndex = 0;
+        this.currentLevelConfig = null;
+        this.enabledKeys = [];
+        this.isPlayingSequence = false;
+
         this.stats = {
             streak: 0,
             correct: 0,
             total: 0,
             level: 1
         };
-
-        // Curriculum configuration
-        this.levels = [
-            { name: "Low Freqs (Rows)", type: 'row', activeIndices: [0, 1, 2, 3], subsetSize: 2 }, // Just rows 1/4, 7/*
-            { name: "High Freqs (Cols)", type: 'col', activeIndices: [0, 1, 2, 3], subsetSize: 2 }, // Just cols 1/2
-            { name: "Basic Mix", type: 'full', keys: ['1','2','3','4','5','6'] }, // 1-6
-            { name: "Standard Pad", type: 'full', keys: ['1','2','3','4','5','6','7','8','9','0','*','#'] }, // Num pad
-            { name: "Master (All 16)", type: 'full', keys: ['1','2','3','4','5','6','7','8','9','0','*','#','A','B','C','D'] }
-        ];
-
-        this.currentTarget = null;
-        this.currentTone = { row: 0, col: 0 };
-        this.isPlayingSequence = false;
 
         this.dom = {
             keypad: document.getElementById('keypad'),
@@ -587,18 +791,35 @@ class App {
         this.renderKeypad();
         this.setupEventListeners();
         this.startVisualizer();
+
+        // Load default mode
+        this.setMode(ModeRegistry.getDefault(this.audio));
+    }
+
+    /**
+     * Switch to a different practice mode
+     */
+    setMode(mode) {
+        this.mode = mode;
+        this.currentLevelIndex = 0;
+        this.stats = { streak: 0, correct: 0, total: 0, level: 1 };
+        this.updateStats();
+
+        // Update overlay text for the mode
+        const overlayContent = this.dom.startOverlay.querySelector('.overlay-content');
+        overlayContent.querySelector('h2').textContent = mode.name;
+        overlayContent.querySelector('p').innerHTML = mode.description;
     }
 
     renderKeypad() {
         this.dom.keypad.innerHTML = '';
         KEYPAD_LAYOUT.forEach(k => {
             const btn = document.createElement('div');
-            btn.className = 'key disabled'; // Start all disabled
+            btn.className = 'key disabled';
             btn.dataset.key = k.key;
             btn.dataset.row = k.row;
             btn.dataset.col = k.col;
 
-            // Inner HTML for key styling
             let html = `<span class="main-key">${k.key}</span>`;
             if(['A','B','C','D'].includes(k.key)) html += `<span class="sub-text">DTMF</span>`;
             btn.innerHTML = html;
@@ -616,8 +837,8 @@ class App {
         });
 
         this.dom.replay.addEventListener('click', () => {
-            if (this.currentTone && !this.isPlayingSequence && !this.audio.isPlaying) {
-                this.playCurrentTone();
+            if (this.currentChallenge && !this.isPlayingSequence && !this.audio.isPlaying) {
+                this.currentChallenge.playChallenge();
                 this.setMessage("Replaying...", "neutral");
             }
         });
@@ -643,143 +864,46 @@ class App {
     }
 
     loadLevel(index) {
-        if (index >= this.levels.length) index = 0; // Loop or Finish
+        const levels = this.mode.getLevels();
+        if (index >= levels.length) index = 0;
+
+        this.currentLevelIndex = index;
+        this.currentLevelConfig = levels[index];
         this.stats.level = index + 1;
         this.dom.level.textContent = this.stats.level;
-        this.currentLevelIndex = index;
-        this.currentLevelConfig = this.levels[index];
+
+        // Let the mode do any level-specific setup
+        this.mode.onLevelStart(this.currentLevelConfig);
+
+        // Get enabled keys from the mode
+        this.enabledKeys = this.mode.getEnabledKeys(this.currentLevelConfig);
+        this.updateKeypadState();
 
         this.setMessage(`Level ${this.stats.level}: ${this.currentLevelConfig.name}`, "neutral");
-
-        this.enableKeysForLevel();
         this.nextRound();
     }
 
-    enableKeysForLevel() {
-        // Reset all to disabled
+    updateKeypadState() {
+        // Disable all keys first
         document.querySelectorAll('.key').forEach(k => k.classList.add('disabled'));
 
-        const config = this.currentLevelConfig;
-
-        if (config.type === 'row') {
-            // If training rows, we enable the first column button to represent that row frequency
-            // e.g. if training Row 1 (697Hz), enable '1'.
-            // Actually, to prevent confusion, we just enable specific keys.
-            // Logic: Enable Key at Row X, Col 0.
-            config.activeIndices.forEach(rowIdx => {
-                const keyObj = KEYPAD_LAYOUT.find(k => k.row === rowIdx && k.col === 0);
-                this.enableKey(keyObj.key);
-            });
-        } else if (config.type === 'col') {
-            // Enable Key at Row 0, Col Y
-            config.activeIndices.forEach(colIdx => {
-                const keyObj = KEYPAD_LAYOUT.find(k => k.col === colIdx && k.row === 0);
-                this.enableKey(keyObj.key);
-            });
-        } else if (config.type === 'full') {
-            config.keys.forEach(k => this.enableKey(k));
-        }
-    }
-
-    enableKey(keyChar) {
-        const btn = document.querySelector(`.key[data-key="${keyChar}"]`);
-        if (btn) btn.classList.remove('disabled');
+        // Enable keys specified by the mode
+        this.enabledKeys.forEach(keyChar => {
+            const btn = document.querySelector(`.key[data-key="${keyChar}"]`);
+            if (btn) btn.classList.remove('disabled');
+        });
     }
 
     nextRound() {
-        // Select a random enabled key
-        const activeBtns = Array.from(document.querySelectorAll('.key:not(.disabled)'));
-        if (activeBtns.length === 0) return;
+        if (this.enabledKeys.length === 0) return;
 
-        const randomBtn = activeBtns[Math.floor(Math.random() * activeBtns.length)];
-        this.currentTarget = randomBtn.dataset.key;
+        // Generate challenge from the mode
+        this.currentChallenge = this.mode.generateChallenge(this.enabledKeys, this.currentLevelConfig);
 
-        // Get coordinates
-        const row = parseInt(randomBtn.dataset.row);
-        const col = parseInt(randomBtn.dataset.col);
-
-        // Logic modification for Row/Col training
-        // In Row training, we play the Row Freq + a standard Col freq, but the user must guess the Row.
-        // To make it strictly "Identify the Row Frequency", we should keep one column constant
-        // OR just play the single frequency (but DTMF is dual tone).
-        // Better approach for ear training:
-        // Row Mode: Play RowFreq + Col 0. If target is Row 2, Play (770 + 1209). User clicks '4' (which is Row 2, Col 0).
-
-        this.currentTone = { row, col };
-
-        // Delay slightly before playing
+        // Play the challenge after a short delay
         setTimeout(() => {
-            this.playCurrentTone();
+            this.currentChallenge.playChallenge();
         }, 500);
-    }
-
-    playCurrentTone() {
-        const rowFreq = ROW_FREQS[this.currentTone.row];
-        const colFreq = COL_FREQS[this.currentTone.col];
-        this.audio.playTone(rowFreq, colFreq);
-    }
-
-    playToneForKey(keyChar) {
-        const keyObj = KEYPAD_LAYOUT.find(k => k.key === keyChar);
-        if (keyObj) {
-            const rowFreq = ROW_FREQS[keyObj.row];
-            const colFreq = COL_FREQS[keyObj.col];
-            this.audio.playTone(rowFreq, colFreq);
-        }
-    }
-
-    async playComparisonSequence(wrongKey, correctKey) {
-        this.isPlayingSequence = true;
-
-        const wrongBtn = document.querySelector(`.key[data-key="${wrongKey}"]`);
-        const correctBtn = document.querySelector(`.key[data-key="${correctKey}"]`);
-
-        const toneDuration = 1000; // ms
-        const pauseDuration = 300; // ms between tones
-
-        // Play sequence: Wrong, Correct, Wrong, Correct
-        const sequence = [
-            { key: wrongKey, btn: wrongBtn, type: 'wrong', label: `Your answer: ${wrongKey}` },
-            { key: correctKey, btn: correctBtn, type: 'correct', label: `Correct: ${correctKey}` },
-            { key: wrongKey, btn: wrongBtn, type: 'wrong', label: `Your answer: ${wrongKey}` },
-            { key: correctKey, btn: correctBtn, type: 'correct', label: `Correct: ${correctKey}` },
-        ];
-
-        for (let i = 0; i < sequence.length; i++) {
-            const item = sequence[i];
-
-            // Update message
-            this.setMessage(item.label, item.type === 'correct' ? 'correct' : 'wrong');
-
-            // Highlight button
-            if (item.btn) {
-                item.btn.classList.add(item.type === 'correct' ? 'playing-correct' : 'playing-wrong');
-            }
-
-            // Play the tone
-            this.playToneForKey(item.key);
-
-            // Wait for tone duration
-            await this.sleep(toneDuration);
-
-            // Remove highlight
-            if (item.btn) {
-                item.btn.classList.remove('playing-correct', 'playing-wrong');
-            }
-
-            // Pause between tones
-            await this.sleep(pauseDuration);
-        }
-
-        this.isPlayingSequence = false;
-
-        // Clear message and move to next round
-        this.setMessage("", "neutral");
-        setTimeout(() => this.nextRound(), 500);
-    }
-
-    sleep(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     handleInput(inputKey) {
@@ -791,16 +915,17 @@ class App {
 
         this.stats.total++;
 
-        if (inputKey === this.currentTarget) {
-            // Correct
+        const isCorrect = this.mode.checkAnswer(inputKey, this.currentChallenge);
+
+        if (isCorrect) {
             this.stats.correct++;
             this.stats.streak++;
             this.feedback(btn, 'correct');
             this.setMessage("Correct!", "correct");
 
-            // Level Progression Logic
-            // If streak is 10, advance level
-            if (this.stats.streak > 0 && this.stats.streak % 10 === 0) {
+            // Check for level advancement
+            const streakToAdvance = this.mode.getStreakToAdvance();
+            if (this.stats.streak > 0 && this.stats.streak % streakToAdvance === 0) {
                 setTimeout(() => {
                     this.setMessage("", "neutral");
                     this.loadLevel(this.currentLevelIndex + 1);
@@ -811,23 +936,53 @@ class App {
                     this.nextRound();
                 }, 800);
             }
-
         } else {
-            // Wrong - play comparison sequence
             this.stats.streak = 0;
             this.feedback(btn, 'wrong');
             this.setMessage(`Wrong! Listen to the difference...`, "wrong");
 
-            // Block replay/input immediately
             this.isPlayingSequence = true;
-
-            // Start comparison playback after a brief pause
             setTimeout(() => {
-                this.playComparisonSequence(inputKey, this.currentTarget);
+                this.playComparisonSequence(inputKey, this.currentChallenge.targetKey);
             }, 600);
         }
 
         this.updateStats();
+    }
+
+    async playComparisonSequence(wrongKey, correctKey) {
+        const sequence = this.mode.getComparisonSequence(wrongKey, correctKey);
+        const toneDuration = 1000;
+        const pauseDuration = 300;
+
+        for (let i = 0; i < sequence.length; i++) {
+            const item = sequence[i];
+            const btn = document.querySelector(`.key[data-key="${item.key}"]`);
+
+            this.setMessage(item.label, item.type === 'correct' ? 'correct' : 'wrong');
+
+            if (btn) {
+                btn.classList.add(item.type === 'correct' ? 'playing-correct' : 'playing-wrong');
+            }
+
+            this.mode.playKeyTone(item.key);
+
+            await this.sleep(toneDuration);
+
+            if (btn) {
+                btn.classList.remove('playing-correct', 'playing-wrong');
+            }
+
+            await this.sleep(pauseDuration);
+        }
+
+        this.isPlayingSequence = false;
+        this.setMessage("", "neutral");
+        setTimeout(() => this.nextRound(), 500);
+    }
+
+    sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     updateStats() {
@@ -877,18 +1032,9 @@ class App {
             let x = 0;
 
             for(let i = 0; i < bufferLength; i++) {
-                barHeight = dataArray[i] / 2; // scale down
+                barHeight = dataArray[i] / 2;
 
-                // Gradient coloring based on height
-                const r = barHeight + 25 * (i/bufferLength);
-                const g = 250 * (i/bufferLength);
-                const b = 50;
-
-                ctx.fillStyle = `rgb(${0},${barHeight+100},${0})`;
-                // Green neon look
-                ctx.fillStyle = i > bufferLength/2 && i < bufferLength/2 + 10 ? '#fff' : '#00ff9d';
                 ctx.fillStyle = `rgba(0, 255, 157, ${barHeight/255})`;
-
                 ctx.fillRect(x, rect.height - barHeight/1.5, barWidth, barHeight/1.5);
 
                 x += barWidth + 1;
