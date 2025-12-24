@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DTMF Ear Trainer | Master the Tones</title>
+    <style>
+        :root {
+            --bg-color: #121214;
+            --panel-bg: #1e1e24;
+            --primary: #00ff9d; /* Neon Green */
+            --primary-dim: #00cc7d;
+            --error: #ff4757;
+            --text-main: #e1e1e6;
+            --text-muted: #a8a8b3;
+            --grid-gap: 12px;
+            --btn-bg: #2c2c35;
+            --btn-hover: #3c3c46;
+            --btn-active: #4b4b58;
+            --btn-disabled: #18181b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        /* --- Layout --- */
+        .app-container {
+            width: 100%;
+            max-width: 500px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            position: relative;
+        }
+
+        /* --- Header & Stats --- */
+        header {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 5px;
+            background: linear-gradient(90deg, #fff, var(--primary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .stats-bar {
+            display: flex;
+            justify-content: space-between;
+            background: var(--panel-bg);
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .stat-item span {
+            color: var(--primary);
+            margin-left: 5px;
+        }
+
+        /* --- Visualizer --- */
+        .visualizer-container {
+            background: #000;
+            border-radius: 12px;
+            height: 120px;
+            width: 100%;
+            overflow: hidden;
+            position: relative;
+            border: 1px solid #333;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .vis-label {
+            position: absolute;
+            top: 8px;
+            left: 10px;
+            font-family: monospace;
+            font-size: 10px;
+            color: var(--primary);
+            opacity: 0.7;
+        }
+
+        /* --- Controls & Feedback --- */
+        .control-area {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            min-height: 80px;
+        }
+
+        .message-display {
+            font-size: 1.2rem;
+            font-weight: 600;
+            min-height: 1.5em;
+            text-align: center;
+        }
+        
+        .message-correct { color: var(--primary); }
+        .message-wrong { color: var(--error); }
+        .message-neutral { color: var(--text-muted); }
+
+        .action-btn {
+            background: var(--btn-bg);
+            border: none;
+            color: var(--text-main);
+            padding: 10px 24px;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+
+        .action-btn:hover {
+            background: var(--btn-hover);
+            transform: translateY(-1px);
+        }
+
+        .action-btn:active {
+            transform: translateY(1px);
+        }
+
+        .action-btn.primary {
+            background: var(--primary);
+            color: #000;
+            font-weight: 700;
+        }
+        .action-btn.primary:hover {
+            background: var(--primary-dim);
+        }
+
+        /* --- Keypad --- */
+        .keypad {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: var(--grid-gap);
+            background: var(--panel-bg);
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .key {
+            background: var(--btn-bg);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 10px;
+            aspect-ratio: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.1s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .key:active {
+            background: var(--btn-active);
+        }
+
+        .key.main-key {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .key.sub-text {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        /* States for keys */
+        .key.disabled {
+            opacity: 0.3;
+            pointer-events: none;
+            filter: grayscale(1);
+        }
+
+        .key.correct-flash {
+            background: var(--primary) !important;
+            color: #000 !important;
+            box-shadow: 0 0 15px var(--primary);
+        }
+
+        .key.wrong-flash {
+            background: var(--error) !important;
+            animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        .key.playing-correct {
+            background: var(--primary) !important;
+            color: #000 !important;
+            box-shadow: 0 0 20px var(--primary);
+        }
+
+        .key.playing-wrong {
+            background: var(--error) !important;
+            color: #fff !important;
+            box-shadow: 0 0 20px var(--error);
+        }
+
+        /* Frequency Labels (Visual Aid) */
+        .freq-labels {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: var(--grid-gap);
+            padding: 0 20px;
+            margin-bottom: 5px;
+        }
+        .freq-label {
+            text-align: center;
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            font-family: monospace;
+        }
+
+        /* --- Overlay --- */
+        #start-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(18, 18, 20, 0.95);
+            backdrop-filter: blur(5px);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .overlay-content h2 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            color: var(--primary);
+        }
+
+        .overlay-content p {
+            max-width: 400px;
+            margin-bottom: 2rem;
+            line-height: 1.6;
+            color: #ccc;
+        }
+
+        .level-badge {
+            background: #333;
+            color: #fff;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            margin-top: 5px;
+            display: inline-block;
+        }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+
+        @media (max-width: 380px) {
+            .key { font-size: 1.2rem; }
+            .keypad { padding: 15px; gap: 8px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="start-overlay">
+        <div class="overlay-content">
+            <h2>DTMF Master</h2>
+            <p>Train your ear to recognize telephone tones. <br>We'll break down the low and high frequencies separately before combining them.</p>
+            <button id="start-btn" class="action-btn primary" style="font-size: 1.2rem; padding: 15px 40px;">
+                Start Training
+            </button>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <header>
+            <h1>DTMF Trainer</h1>
+            <div class="subtitle">Identify the tones you hear</div>
+        </header>
+
+        <div class="stats-bar">
+            <div class="stat-item">Level <span id="level-display">1</span></div>
+            <div class="stat-item">Streak <span id="streak-display">0</span></div>
+            <div class="stat-item">Accuracy <span id="acc-display">100%</span></div>
+        </div>
+
+        <div class="visualizer-container">
+            <div class="vis-label">FREQ SPECTRUM ANALYZER</div>
+            <canvas id="visualizer"></canvas>
+        </div>
+
+        <div class="control-area">
+            <div id="message" class="message-display message-neutral">Press Play to start</div>
+            <button id="replay-btn" class="action-btn">
+                <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                Replay Tone
+            </button>
+        </div>
+
+        <div class="freq-labels">
+            <!-- Column Freq Labels (High frequencies) -->
+            <div class="freq-label">1209Hz</div>
+            <div class="freq-label">1336Hz</div>
+            <div class="freq-label">1477Hz</div>
+            <div class="freq-label">1633Hz</div>
+        </div>
+
+        <div class="keypad-row">
+            <div class="row-label">697Hz</div>
+            <div class="keypad" id="keypad">
+                <!-- Generated by JS -->
+            </div>
+        </div>
+        
+        <div class="row-labels-container">
+            <div class="row-label">770Hz</div>
+            <div class="row-label">852Hz</div>
+            <div class="row-label">941Hz</div>
+        </div>
+    </div>
+
+<script>
+/**
+ * DTMF Logic & Application State
+ */
+
+// DTMF Frequencies
+const ROW_FREQS = [697, 770, 852, 941];
+const COL_FREQS = [1209, 1336, 1477, 1633]; // 1633 is the 4th column (A, B, C, D)
+
+const KEYPAD_LAYOUT = [
+    { key: '1', row: 0, col: 0 }, { key: '2', row: 0, col: 1 }, { key: '3', row: 0, col: 2 }, { key: 'A', row: 0, col: 3 },
+    { key: '4', row: 1, col: 0 }, { key: '5', row: 1, col: 1 }, { key: '6', row: 1, col: 2 }, { key: 'B', row: 1, col: 3 },
+    { key: '7', row: 2, col: 0 }, { key: '8', row: 2, col: 1 }, { key: '9', row: 2, col: 2 }, { key: 'C', row: 2, col: 3 },
+    { key: '*', row: 3, col: 0 }, { key: '0', row: 3, col: 1 }, { key: '#', row: 3, col: 2 }, { key: 'D', row: 3, col: 3 }
+];
+
+class AudioManager {
+    constructor() {
+        this.ctx = null;
+        this.analyser = null;
+        this.gainNode = null;
+        this.isPlaying = false;
+    }
+
+    init() {
+        if (!this.ctx) {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            this.ctx = new AudioContext();
+            this.analyser = this.ctx.createAnalyser();
+            this.analyser.fftSize = 2048;
+            this.gainNode = this.ctx.createGain();
+            this.gainNode.connect(this.analyser);
+            this.analyser.connect(this.ctx.destination);
+            this.gainNode.gain.value = 0.3; // Default volume
+        }
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+    }
+
+    playTone(rowFreq, colFreq, duration = 1.2) {
+        if (!this.ctx) this.init();
+
+        const t = this.ctx.currentTime;
+        
+        // Oscillator 1: Low Frequency
+        const osc1 = this.ctx.createOscillator();
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(rowFreq, t);
+
+        // Oscillator 2: High Frequency
+        const osc2 = this.ctx.createOscillator();
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(colFreq, t);
+
+        // Envelope for smoother sound (like a keypad)
+        this.gainNode.gain.cancelScheduledValues(t);
+        this.gainNode.gain.setValueAtTime(0, t);
+        this.gainNode.gain.linearRampToValueAtTime(0.5, t + 0.02); // Attack
+        this.gainNode.gain.exponentialRampToValueAtTime(0.001, t + duration); // Decay
+
+        osc1.connect(this.gainNode);
+        osc2.connect(this.gainNode);
+
+        osc1.start(t);
+        osc2.start(t);
+        osc1.stop(t + duration);
+        osc2.stop(t + duration);
+
+        this.isPlaying = true;
+        setTimeout(() => { this.isPlaying = false; }, duration * 1000);
+    }
+
+    getFrequencyData(array) {
+        if (this.analyser) {
+            this.analyser.getByteFrequencyData(array);
+        }
+    }
+}
+
+class App {
+    constructor() {
+        this.audio = new AudioManager();
+        this.stats = {
+            streak: 0,
+            correct: 0,
+            total: 0,
+            level: 1
+        };
+        
+        // Curriculum configuration
+        this.levels = [
+            { name: "Low Freqs (Rows)", type: 'row', activeIndices: [0, 1, 2, 3], subsetSize: 2 }, // Just rows 1/4, 7/*
+            { name: "High Freqs (Cols)", type: 'col', activeIndices: [0, 1, 2, 3], subsetSize: 2 }, // Just cols 1/2
+            { name: "Basic Mix", type: 'full', keys: ['1','2','3','4','5','6'] }, // 1-6
+            { name: "Standard Pad", type: 'full', keys: ['1','2','3','4','5','6','7','8','9','0','*','#'] }, // Num pad
+            { name: "Master (All 16)", type: 'full', keys: ['1','2','3','4','5','6','7','8','9','0','*','#','A','B','C','D'] }
+        ];
+
+        this.currentTarget = null;
+        this.currentTone = { row: 0, col: 0 };
+        this.isPlayingSequence = false;
+
+        this.dom = {
+            keypad: document.getElementById('keypad'),
+            msg: document.getElementById('message'),
+            streak: document.getElementById('streak-display'),
+            acc: document.getElementById('acc-display'),
+            level: document.getElementById('level-display'),
+            replay: document.getElementById('replay-btn'),
+            startOverlay: document.getElementById('start-overlay'),
+            startBtn: document.getElementById('start-btn'),
+            canvas: document.getElementById('visualizer')
+        };
+
+        this.init();
+    }
+
+    init() {
+        this.renderKeypad();
+        this.setupEventListeners();
+        this.startVisualizer();
+    }
+
+    renderKeypad() {
+        this.dom.keypad.innerHTML = '';
+        KEYPAD_LAYOUT.forEach(k => {
+            const btn = document.createElement('div');
+            btn.className = 'key disabled'; // Start all disabled
+            btn.dataset.key = k.key;
+            btn.dataset.row = k.row;
+            btn.dataset.col = k.col;
+            
+            // Inner HTML for key styling
+            let html = `<span class="main-key">${k.key}</span>`;
+            if(['A','B','C','D'].includes(k.key)) html += `<span class="sub-text">DTMF</span>`;
+            btn.innerHTML = html;
+            
+            btn.addEventListener('click', () => this.handleInput(k.key));
+            this.dom.keypad.appendChild(btn);
+        });
+    }
+
+    setupEventListeners() {
+        this.dom.startBtn.addEventListener('click', () => {
+            this.audio.init();
+            this.dom.startOverlay.style.display = 'none';
+            this.loadLevel(0);
+        });
+
+        this.dom.replay.addEventListener('click', () => {
+            if (this.currentTone && !this.isPlayingSequence) {
+                this.playCurrentTone();
+                this.setMessage("Replaying...", "neutral");
+            }
+        });
+
+        // Keyboard support
+        document.addEventListener('keydown', (e) => {
+            if (this.dom.startOverlay.style.display !== 'none') return;
+            if (this.isPlayingSequence) return; // Block input during comparison playback
+            const key = e.key.toUpperCase();
+            // Check if key exists in layout
+            if (KEYPAD_LAYOUT.find(k => k.key === key)) {
+                this.handleInput(key);
+                // Visual press effect
+                const btn = document.querySelector(`.key[data-key="${key}"]`);
+                if(btn) {
+                    btn.style.background = 'var(--btn-active)';
+                    setTimeout(() => btn.style.background = '', 100);
+                }
+            } else if (e.code === 'Space') {
+                this.dom.replay.click();
+            }
+        });
+    }
+
+    loadLevel(index) {
+        if (index >= this.levels.length) index = 0; // Loop or Finish
+        this.stats.level = index + 1;
+        this.dom.level.textContent = this.stats.level;
+        this.currentLevelIndex = index;
+        this.currentLevelConfig = this.levels[index];
+        
+        this.setMessage(`Level ${this.stats.level}: ${this.currentLevelConfig.name}`, "neutral");
+        
+        this.enableKeysForLevel();
+        this.nextRound();
+    }
+
+    enableKeysForLevel() {
+        // Reset all to disabled
+        document.querySelectorAll('.key').forEach(k => k.classList.add('disabled'));
+
+        const config = this.currentLevelConfig;
+
+        if (config.type === 'row') {
+            // If training rows, we enable the first column button to represent that row frequency
+            // e.g. if training Row 1 (697Hz), enable '1'.
+            // Actually, to prevent confusion, we just enable specific keys.
+            // Logic: Enable Key at Row X, Col 0.
+            config.activeIndices.forEach(rowIdx => {
+                const keyObj = KEYPAD_LAYOUT.find(k => k.row === rowIdx && k.col === 0);
+                this.enableKey(keyObj.key);
+            });
+        } else if (config.type === 'col') {
+            // Enable Key at Row 0, Col Y
+            config.activeIndices.forEach(colIdx => {
+                const keyObj = KEYPAD_LAYOUT.find(k => k.col === colIdx && k.row === 0);
+                this.enableKey(keyObj.key);
+            });
+        } else if (config.type === 'full') {
+            config.keys.forEach(k => this.enableKey(k));
+        }
+    }
+
+    enableKey(keyChar) {
+        const btn = document.querySelector(`.key[data-key="${keyChar}"]`);
+        if (btn) btn.classList.remove('disabled');
+    }
+
+    nextRound() {
+        // Select a random enabled key
+        const activeBtns = Array.from(document.querySelectorAll('.key:not(.disabled)'));
+        if (activeBtns.length === 0) return;
+
+        const randomBtn = activeBtns[Math.floor(Math.random() * activeBtns.length)];
+        this.currentTarget = randomBtn.dataset.key;
+        
+        // Get coordinates
+        const row = parseInt(randomBtn.dataset.row);
+        const col = parseInt(randomBtn.dataset.col);
+
+        // Logic modification for Row/Col training
+        // In Row training, we play the Row Freq + a standard Col freq, but the user must guess the Row.
+        // To make it strictly "Identify the Row Frequency", we should keep one column constant 
+        // OR just play the single frequency (but DTMF is dual tone).
+        // Better approach for ear training: 
+        // Row Mode: Play RowFreq + Col 0. If target is Row 2, Play (770 + 1209). User clicks '4' (which is Row 2, Col 0).
+        
+        this.currentTone = { row, col };
+
+        // Delay slightly before playing
+        setTimeout(() => {
+            this.playCurrentTone();
+        }, 500);
+    }
+
+    playCurrentTone() {
+        const rowFreq = ROW_FREQS[this.currentTone.row];
+        const colFreq = COL_FREQS[this.currentTone.col];
+        this.audio.playTone(rowFreq, colFreq);
+    }
+
+    playToneForKey(keyChar) {
+        const keyObj = KEYPAD_LAYOUT.find(k => k.key === keyChar);
+        if (keyObj) {
+            const rowFreq = ROW_FREQS[keyObj.row];
+            const colFreq = COL_FREQS[keyObj.col];
+            this.audio.playTone(rowFreq, colFreq);
+        }
+    }
+
+    async playComparisonSequence(wrongKey, correctKey) {
+        this.isPlayingSequence = true;
+        
+        const wrongBtn = document.querySelector(`.key[data-key="${wrongKey}"]`);
+        const correctBtn = document.querySelector(`.key[data-key="${correctKey}"]`);
+        
+        const toneDuration = 1000; // ms
+        const pauseDuration = 300; // ms between tones
+        
+        // Play sequence: Wrong, Correct, Wrong, Correct
+        const sequence = [
+            { key: wrongKey, btn: wrongBtn, type: 'wrong', label: `Your answer: ${wrongKey}` },
+            { key: correctKey, btn: correctBtn, type: 'correct', label: `Correct: ${correctKey}` },
+            { key: wrongKey, btn: wrongBtn, type: 'wrong', label: `Your answer: ${wrongKey}` },
+            { key: correctKey, btn: correctBtn, type: 'correct', label: `Correct: ${correctKey}` },
+        ];
+        
+        for (let i = 0; i < sequence.length; i++) {
+            const item = sequence[i];
+            
+            // Update message
+            this.setMessage(item.label, item.type === 'correct' ? 'correct' : 'wrong');
+            
+            // Highlight button
+            if (item.btn) {
+                item.btn.classList.add(item.type === 'correct' ? 'playing-correct' : 'playing-wrong');
+            }
+            
+            // Play the tone
+            this.playToneForKey(item.key);
+            
+            // Wait for tone duration
+            await this.sleep(toneDuration);
+            
+            // Remove highlight
+            if (item.btn) {
+                item.btn.classList.remove('playing-correct', 'playing-wrong');
+            }
+            
+            // Pause between tones
+            await this.sleep(pauseDuration);
+        }
+        
+        this.isPlayingSequence = false;
+        
+        // Clear message and move to next round
+        this.setMessage("", "neutral");
+        setTimeout(() => this.nextRound(), 500);
+    }
+
+    sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    handleInput(inputKey) {
+        if (this.isPlayingSequence) return;
+
+        const btn = document.querySelector(`.key[data-key="${inputKey}"]`);
+        if (btn && btn.classList.contains('disabled')) return;
+
+        this.stats.total++;
+
+        if (inputKey === this.currentTarget) {
+            // Correct
+            this.stats.correct++;
+            this.stats.streak++;
+            this.feedback(btn, 'correct');
+            this.setMessage("Correct!", "correct");
+            
+            // Level Progression Logic
+            // If streak is 10, advance level
+            if (this.stats.streak > 0 && this.stats.streak % 10 === 0) {
+                setTimeout(() => {
+                    this.loadLevel(this.currentLevelIndex + 1);
+                }, 1000);
+            } else {
+                setTimeout(() => this.nextRound(), 800);
+            }
+
+        } else {
+            // Wrong - play comparison sequence
+            this.stats.streak = 0;
+            this.feedback(btn, 'wrong');
+            this.setMessage(`Wrong! Listen to the difference...`, "wrong");
+            
+            // Start comparison playback after a brief pause
+            setTimeout(() => {
+                this.playComparisonSequence(inputKey, this.currentTarget);
+            }, 600);
+        }
+
+        this.updateStats();
+    }
+
+    updateStats() {
+        this.dom.streak.textContent = this.stats.streak;
+        const acc = this.stats.total === 0 ? 100 : Math.round((this.stats.correct / this.stats.total) * 100);
+        this.dom.acc.textContent = acc + "%";
+    }
+
+    feedback(btnElement, type) {
+        if (type === 'correct') {
+            btnElement.classList.add('correct-flash');
+            setTimeout(() => btnElement.classList.remove('correct-flash'), 300);
+        } else {
+            btnElement.classList.add('wrong-flash');
+            setTimeout(() => btnElement.classList.remove('wrong-flash'), 400);
+        }
+    }
+
+    setMessage(text, type) {
+        this.dom.msg.textContent = text;
+        this.dom.msg.className = `message-display message-${type}`;
+    }
+
+    startVisualizer() {
+        const canvas = this.dom.canvas;
+        const ctx = canvas.getContext('2d');
+        const bufferLength = 1024;
+        const dataArray = new Uint8Array(bufferLength);
+        
+        // Handle high-DPI displays
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.scale(dpr, dpr);
+
+        const draw = () => {
+            requestAnimationFrame(draw);
+            
+            this.audio.getFrequencyData(dataArray);
+            
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, rect.width, rect.height);
+
+            const barWidth = (rect.width / bufferLength) * 2.5;
+            let barHeight;
+            let x = 0;
+
+            for(let i = 0; i < bufferLength; i++) {
+                barHeight = dataArray[i] / 2; // scale down
+
+                // Gradient coloring based on height
+                const r = barHeight + 25 * (i/bufferLength);
+                const g = 250 * (i/bufferLength);
+                const b = 50;
+
+                ctx.fillStyle = `rgb(${0},${barHeight+100},${0})`;
+                // Green neon look
+                ctx.fillStyle = i > bufferLength/2 && i < bufferLength/2 + 10 ? '#fff' : '#00ff9d';
+                ctx.fillStyle = `rgba(0, 255, 157, ${barHeight/255})`;
+
+                ctx.fillRect(x, rect.height - barHeight/1.5, barWidth, barHeight/1.5);
+
+                x += barWidth + 1;
+            }
+        };
+        draw();
+    }
+}
+
+// Start the App when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    const app = new App();
+});
+
+</script>
+</body>
+</html>
