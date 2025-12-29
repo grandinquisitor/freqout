@@ -1450,7 +1450,8 @@ class FreePlayMode extends PracticeMode {
 class SpacedRepetitionMode extends PracticeMode {
     constructor(audio) {
         super(audio);
-        this.cards = null;
+        this.cardsByLevel = {};  // { levelIndex: [...cards] }
+        this.currentLevelIndex = 0;
         this.currentCard = null;
         this.challengeStartTime = null;
         this.replayUsed = false;
@@ -1462,12 +1463,29 @@ class SpacedRepetitionMode extends PracticeMode {
     get description() {
         return 'SM-2 algorithm focuses practice on confusable tone pairs';
     }
-    get hasLevels() { return false; }
+    get hasLevels() { return true; }
     get isGameMode() { return true; }
     get storageKey() { return 'srs-cards'; }
 
     getLevels() {
-        return [{ name: "SRS Training", type: 'srs', description: "Practice until queue is empty" }];
+        return [
+            { name: "Focused (4 Keys)", type: 'srs', enableAllKeys: false, description: "Practice with 4 answer choices" },
+            { name: "Full Keypad (16 Keys)", type: 'srs', enableAllKeys: true, description: "All keys enabled as answers" }
+        ];
+    }
+
+    /**
+     * Get cards for the current level
+     */
+    get cards() {
+        return this.cardsByLevel[this.currentLevelIndex] || null;
+    }
+
+    /**
+     * Set cards for the current level
+     */
+    set cards(value) {
+        this.cardsByLevel[this.currentLevelIndex] = value;
     }
 
     /**
@@ -1514,9 +1532,16 @@ class SpacedRepetitionMode extends PracticeMode {
     }
 
     /**
-     * Get default state - a fresh shuffled deck
+     * Get default state - empty object, levels initialize on demand
      */
     getDefaultState() {
+        return {};
+    }
+
+    /**
+     * Get a fresh shuffled deck for a level
+     */
+    getDefaultLevelCards() {
         return this.shuffleArray(this.generateAllCards());
     }
 
@@ -1524,18 +1549,10 @@ class SpacedRepetitionMode extends PracticeMode {
      * Load state from storage manager
      */
     loadState(state) {
-        if (state && Array.isArray(state)) {
-            this.cards = state;
-            // Ensure all 120 cards exist (in case we add new ones later)
-            const existingIds = new Set(this.cards.map(c => c.id));
-            const allCards = this.generateAllCards();
-            for (const card of allCards) {
-                if (!existingIds.has(card.id)) {
-                    this.cards.push(card);
-                }
-            }
+        if (state && typeof state === 'object' && !Array.isArray(state)) {
+            this.cardsByLevel = state;
         } else {
-            this.cards = this.getDefaultState();
+            this.cardsByLevel = {};
         }
     }
 
@@ -1543,14 +1560,14 @@ class SpacedRepetitionMode extends PracticeMode {
      * Get current state for persistence
      */
     getState() {
-        return this.cards;
+        return this.cardsByLevel;
     }
 
     /**
      * Handle storage reset
      */
     onStorageReset() {
-        this.cards = null;
+        this.cardsByLevel = {};
         this.currentCard = null;
     }
 
@@ -1712,10 +1729,21 @@ class SpacedRepetitionMode extends PracticeMode {
     }
 
     onLevelStart(levelConfig) {
-        // Cards are loaded via loadState() before this is called
-        // If cards weren't loaded for some reason, initialize them
-        if (!this.cards) {
-            this.cards = this.getDefaultState();
+        // Track current level index
+        this.currentLevelIndex = levelConfig.levelIndex || 0;
+
+        // Initialize cards for this level if not already present
+        if (!this.cardsByLevel[this.currentLevelIndex]) {
+            this.cardsByLevel[this.currentLevelIndex] = this.getDefaultLevelCards();
+        } else {
+            // Ensure all 120 cards exist (in case we add new ones later)
+            const existingIds = new Set(this.cards.map(c => c.id));
+            const allCards = this.generateAllCards();
+            for (const card of allCards) {
+                if (!existingIds.has(card.id)) {
+                    this.cards.push(card);
+                }
+            }
         }
     }
 
@@ -1739,8 +1767,16 @@ class SpacedRepetitionMode extends PracticeMode {
         // Randomly pick which key from the pair to play
         const targetKey = Math.random() < 0.5 ? key1 : key2;
 
-        // Select 2 decoys with similar "distance" to each other as our pair
-        const decoys = this.selectDecoys(key1, key2);
+        // Determine enabled keys based on level config
+        let enabledKeys;
+        if (levelConfig && levelConfig.enableAllKeys) {
+            // Level 2: All 16 keys enabled
+            enabledKeys = KEYPAD_LAYOUT.map(k => k.key);
+        } else {
+            // Level 1: Just the pair + 2 decoys (4 keys total)
+            const decoys = this.selectDecoys(key1, key2);
+            enabledKeys = [key1, key2, ...decoys];
+        }
 
         // Reset trial state
         this.challengeStartTime = null;
@@ -1748,7 +1784,7 @@ class SpacedRepetitionMode extends PracticeMode {
 
         const trial = {
             targetKey: targetKey,  // The key whose tone is played (correct answer)
-            enabledKeys: [key1, key2, ...decoys],  // All 4 keys to enable
+            enabledKeys: enabledKeys,
             pairKey1: key1,
             pairKey2: key2,
             card: this.currentCard,
@@ -2334,7 +2370,7 @@ class App {
         if (index >= levels.length) index = 0;
 
         this.currentLevelIndex = index;
-        this.currentLevelConfig = levels[index];
+        this.currentLevelConfig = { ...levels[index], levelIndex: index };
         this.stats.level = index + 1;
         this.stats.streak = 0;
         this.lastError = null;
