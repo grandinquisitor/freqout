@@ -1815,7 +1815,8 @@ class App {
             this.stats.correct++;
             this.stats.streak++;
             this.feedback(btn, 'correct');
-            this.setMessage("Correct!", "correct");
+            const description = getKeyDescription(inputKey);
+            this.setMessage(`Correct! ${description}`, "correct");
             this.updateProgress(true);
 
             // Check for level advancement
