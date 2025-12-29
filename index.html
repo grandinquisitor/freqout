@@ -1939,8 +1939,9 @@ class App {
             btn.addEventListener('click', () => this.handleInput(k.key));
 
             // Touch events for better mobile experience
+            // Only show key-active in non-game modes to prevent wrong color flash
             btn.addEventListener('touchstart', (e) => {
-                if (!btn.classList.contains('disabled')) {
+                if (!btn.classList.contains('disabled') && this.mode && !this.mode.isGameMode) {
                     btn.classList.add('key-active');
                 }
             });
@@ -2023,6 +2024,12 @@ class App {
 
         const btn = document.querySelector(`.key[data-key="${inputKey}"]`);
         if (btn && btn.classList.contains('disabled')) return;
+
+        // Remove any active state immediately to prevent color conflicts
+        // This ensures wrong answers don't briefly flash green before showing red
+        if (btn) {
+            btn.classList.remove('key-active');
+        }
 
         // Free play mode - just play the tone
         if (this.mode && !this.mode.isGameMode) {
