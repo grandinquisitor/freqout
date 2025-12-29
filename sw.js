@@ -2,7 +2,7 @@ const CACHE_NAME = 'v2';
 const ASSETS = [
   './',
   './index.html',
-  './manifest.json'
+  './manifest.json',
   './icon/icon-192.png',
   './icon/icon-512.png'
 ];
