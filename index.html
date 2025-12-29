@@ -865,7 +865,12 @@ class PracticeMode {
      * Generate a new challenge for the current level
      * @param {Array<string>} enabledKeys - Currently enabled key characters
      * @param {Object} levelConfig - The level configuration object
-     * @returns {Object} Challenge object with { targetKey, playChallenge() }
+     * @returns {Object} Challenge object with:
+     *   - targetKey: the correct answer (null if no challenge available)
+     *   - playChallenge(): function to play the challenge audio
+     *   - enabledKeys (optional): override which keys are enabled for this challenge
+     *   - message (optional): message to display instead of running the challenge
+     *   - messageType (optional): 'correct' | 'wrong' | 'neutral'
      */
     generateChallenge(enabledKeys, levelConfig) { throw new Error('Must implement generateChallenge()'); }
 
@@ -1296,10 +1301,12 @@ class SpacedRepetitionMode extends PracticeMode {
         this.currentCard = this.selectNextCard();
 
         if (!this.currentCard) {
-            // Queue empty!
+            // Queue empty - return a challenge with just a message
             return {
                 targetKey: null,
-                queueEmpty: true,
+                enabledKeys: [],
+                message: "🎉 Queue empty! All caught up!",
+                messageType: "correct",
                 playChallenge: () => {}
             };
         }
@@ -1312,18 +1319,15 @@ class SpacedRepetitionMode extends PracticeMode {
         // Select 2 decoys with similar "distance" to each other as our pair
         const decoys = this.selectDecoys(key1, key2);
 
-        // Enable all 4 keys: both keys from the pair + both decoys
-        const options = [key1, key2, ...decoys];
-
         // Reset challenge state
         this.challengeStartTime = null;
         this.replayUsed = false;
 
         const challenge = {
             targetKey: targetKey,  // The key whose tone is played (correct answer)
+            enabledKeys: [key1, key2, ...decoys],  // All 4 keys to enable
             pairKey1: key1,
             pairKey2: key2,
-            options: options,      // All 4 enabled keys
             card: this.currentCard,
             playChallenge: () => {
                 if (!this.challengeStartTime) {
@@ -1337,7 +1341,7 @@ class SpacedRepetitionMode extends PracticeMode {
     }
 
     checkAnswer(inputKey, challenge) {
-        if (challenge.queueEmpty) return false;
+        if (!challenge.targetKey) return false;
 
         const isCorrect = inputKey === challenge.targetKey;
         const responseTime = Date.now() - this.challengeStartTime;
@@ -1757,21 +1761,25 @@ class App {
         // Generate challenge from the mode
         this.currentChallenge = this.mode.generateChallenge(this.enabledKeys, this.currentLevelConfig);
 
-        // Handle SRS queue empty state
-        if (this.currentChallenge && this.currentChallenge.queueEmpty) {
-            this.setMessage("🎉 Queue empty! All caught up!", "correct");
-            // Disable all keys
-            document.querySelectorAll('.key').forEach(k => k.classList.add('disabled'));
+        if (!this.currentChallenge) return;
+
+        // If challenge specifies a message instead of a playable challenge, show it
+        if (this.currentChallenge.message) {
+            this.setMessage(this.currentChallenge.message, this.currentChallenge.messageType || "neutral");
+            if (this.currentChallenge.enabledKeys) {
+                this.enabledKeys = this.currentChallenge.enabledKeys;
+                this.updateKeypadState();
+            }
             return;
         }
 
-        // For SRS mode, dynamically update enabled keys based on challenge options
-        if (this.currentChallenge && this.currentChallenge.options) {
-            this.enabledKeys = this.currentChallenge.options;
+        // If challenge specifies enabled keys, use those instead of level defaults
+        if (this.currentChallenge.enabledKeys) {
+            this.enabledKeys = this.currentChallenge.enabledKeys;
             this.updateKeypadState();
         }
 
-        if (this.enabledKeys.length === 0 && !this.currentChallenge?.options) return;
+        if (this.enabledKeys.length === 0) return;
 
         // Play the challenge after a short delay
         setTimeout(() => {
@@ -1797,8 +1805,8 @@ class App {
         // Game mode logic
         if (!this.mode || !this.currentChallenge) return;
 
-        // Handle queue empty state
-        if (this.currentChallenge.queueEmpty) return;
+        // No active challenge (e.g., queue empty state)
+        if (!this.currentChallenge.targetKey) return;
 
         this.stats.total++;
 
