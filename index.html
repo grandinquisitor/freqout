@@ -855,33 +855,25 @@ class PracticeMode {
     getLevels() { throw new Error('Must implement getLevels()'); }
 
     /**
-     * Get which keys should be enabled for a given level
+     * Generate a new trial for the current level
      * @param {Object} levelConfig - The level configuration object
-     * @returns {Array<string>} Array of key characters to enable
-     */
-    getEnabledKeys(levelConfig) { throw new Error('Must implement getEnabledKeys()'); }
-
-    /**
-     * Generate a new challenge for the current level
-     * @param {Array<string>} enabledKeys - Currently enabled key characters
-     * @param {Object} levelConfig - The level configuration object
-     * @returns {Object} Challenge object with:
-     *   - targetKey: the correct answer (null if no challenge available)
-     *   - playChallenge(): function to play the challenge audio
-     *   - enabledKeys (optional): override which keys are enabled for this challenge
-     *   - message (optional): message to display instead of running the challenge
+     * @returns {Object} Trial object with:
+     *   - targetKey: the correct answer (null if no trial available)
+     *   - enabledKeys: which keys should be active for this trial
+     *   - playTrial(): function to play the trial audio
+     *   - message (optional): message to display instead of running the trial
      *   - messageType (optional): 'correct' | 'wrong' | 'neutral'
      */
-    generateChallenge(enabledKeys, levelConfig) { throw new Error('Must implement generateChallenge()'); }
+    generateTrial(levelConfig) { throw new Error('Must implement generateTrial()'); }
 
     /**
      * Check if the user's input is correct
      * @param {string} inputKey - The key the user pressed
-     * @param {Object} challenge - The current challenge object
+     * @param {Object} trial - The current trial object
      * @returns {boolean} Whether the answer is correct
      */
-    checkAnswer(inputKey, challenge) {
-        return inputKey === challenge.targetKey;
+    checkAnswer(inputKey, trial) {
+        return inputKey === trial.targetKey;
     }
 
     /**
@@ -962,7 +954,7 @@ class DTMFIdentifyMode extends PracticeMode {
         ];
     }
 
-    getEnabledKeys(levelConfig) {
+    getKeysForLevel(levelConfig) {
         if (levelConfig.type === 'row') {
             // Enable first column keys to represent row frequencies
             return levelConfig.activeIndices.map(rowIdx => {
@@ -981,23 +973,26 @@ class DTMFIdentifyMode extends PracticeMode {
         return [];
     }
 
-    generateChallenge(enabledKeys, levelConfig) {
+    generateTrial(levelConfig) {
+        const enabledKeys = this.getKeysForLevel(levelConfig);
+
         // Pick a random enabled key
         const targetKey = enabledKeys[Math.floor(Math.random() * enabledKeys.length)];
         const keyObj = KEYPAD_LAYOUT.find(k => k.key === targetKey);
 
-        const challenge = {
+        const trial = {
             targetKey,
+            enabledKeys,
             row: keyObj.row,
             col: keyObj.col,
-            playChallenge: () => {
+            playTrial: () => {
                 const rowFreq = ROW_FREQS[keyObj.row];
                 const colFreq = COL_FREQS[keyObj.col];
                 this.audio.playTone(rowFreq, colFreq);
             }
         };
 
-        return challenge;
+        return trial;
     }
 }
 
@@ -1022,13 +1017,12 @@ class FreePlayMode extends PracticeMode {
         return [{ name: "Free Play", type: 'free', keys: KEYPAD_LAYOUT.map(k => k.key) }];
     }
 
-    getEnabledKeys(levelConfig) {
-        return KEYPAD_LAYOUT.map(k => k.key);
-    }
-
-    generateChallenge(enabledKeys, levelConfig) {
-        // No challenge in free play mode
-        return null;
+    generateTrial(levelConfig) {
+        // No trial in free play mode, but provide enabledKeys for keypad state
+        return {
+            targetKey: null,
+            enabledKeys: KEYPAD_LAYOUT.map(k => k.key)
+        };
     }
 }
 
@@ -1287,27 +1281,22 @@ class SpacedRepetitionMode extends PracticeMode {
         return `${sorted[0]}-${sorted[1]}`;
     }
 
-    getEnabledKeys(levelConfig) {
-        // Will be dynamically set per challenge
-        return [];
-    }
-
     onLevelStart(levelConfig) {
         this.loadCards();
     }
 
-    generateChallenge(enabledKeys, levelConfig) {
+    generateTrial(levelConfig) {
         // Select next card
         this.currentCard = this.selectNextCard();
 
         if (!this.currentCard) {
-            // Queue empty - return a challenge with just a message
+            // Queue empty - return a trial with just a message
             return {
                 targetKey: null,
                 enabledKeys: [],
                 message: "🎉 Queue empty! All caught up!",
                 messageType: "correct",
-                playChallenge: () => {}
+                playTrial: () => {}
             };
         }
 
@@ -1319,17 +1308,17 @@ class SpacedRepetitionMode extends PracticeMode {
         // Select 2 decoys with similar "distance" to each other as our pair
         const decoys = this.selectDecoys(key1, key2);
 
-        // Reset challenge state
+        // Reset trial state
         this.challengeStartTime = null;
         this.replayUsed = false;
 
-        const challenge = {
+        const trial = {
             targetKey: targetKey,  // The key whose tone is played (correct answer)
             enabledKeys: [key1, key2, ...decoys],  // All 4 keys to enable
             pairKey1: key1,
             pairKey2: key2,
             card: this.currentCard,
-            playChallenge: () => {
+            playTrial: () => {
                 if (!this.challengeStartTime) {
                     this.challengeStartTime = Date.now();
                 }
@@ -1337,13 +1326,13 @@ class SpacedRepetitionMode extends PracticeMode {
             }
         };
 
-        return challenge;
+        return trial;
     }
 
-    checkAnswer(inputKey, challenge) {
-        if (!challenge.targetKey) return false;
+    checkAnswer(inputKey, trial) {
+        if (!trial.targetKey) return false;
 
-        const isCorrect = inputKey === challenge.targetKey;
+        const isCorrect = inputKey === trial.targetKey;
         const responseTime = Date.now() - this.challengeStartTime;
 
         // Determine quality score
@@ -1361,12 +1350,12 @@ class SpacedRepetitionMode extends PracticeMode {
 
             // Penalize the confusion pair (correct answer + wrong answer chosen)
             // This creates/updates the card for the pair the user confused
-            const confusionCardId = this.getCardId(challenge.targetKey, inputKey);
+            const confusionCardId = this.getCardId(trial.targetKey, inputKey);
             this.penalizeCard(confusionCardId);
         }
 
         // Update the current card (the pair we were testing)
-        this.updateCardSM2(challenge.card, quality);
+        this.updateCardSM2(trial.card, quality);
         this.saveCards();
 
         return isCorrect;
@@ -1469,7 +1458,7 @@ class App {
     constructor() {
         this.audio = new AudioManager();
         this.mode = null;
-        this.currentChallenge = null;
+        this.currentTrial = null;
         this.currentLevelIndex = 0;
         this.currentLevelConfig = null;
         this.enabledKeys = [];
@@ -1604,12 +1593,12 @@ class App {
 
         // Replay button
         this.dom.replay.addEventListener('click', () => {
-            if (this.mode && this.mode.isGameMode && this.currentChallenge && !this.isPlayingSequence && !this.audio.isPlaying) {
+            if (this.mode && this.mode.isGameMode && this.currentTrial && !this.isPlayingSequence && !this.audio.isPlaying) {
                 // Track replay for SRS mode
                 if (this.mode.onReplay) {
                     this.mode.onReplay();
                 }
-                this.currentChallenge.playChallenge();
+                this.currentTrial.playTrial();
                 this.setMessage("Replaying...", "neutral");
             }
         });
@@ -1675,7 +1664,7 @@ class App {
 
         // Reset state
         this.mode = null;
-        this.currentChallenge = null;
+        this.currentTrial = null;
         this.stats = { streak: 0, correct: 0, total: 0, level: 1 };
 
         // Reset progress display
@@ -1733,10 +1722,6 @@ class App {
         // Let the mode do any level-specific setup
         this.mode.onLevelStart(this.currentLevelConfig);
 
-        // Get enabled keys from the mode
-        this.enabledKeys = this.mode.getEnabledKeys(this.currentLevelConfig);
-        this.updateKeypadState();
-
         // Update progress display
         this.updateProgress(false);
 
@@ -1758,33 +1743,29 @@ class App {
     nextRound() {
         if (!this.mode) return;
 
-        // Generate challenge from the mode
-        this.currentChallenge = this.mode.generateChallenge(this.enabledKeys, this.currentLevelConfig);
+        // Generate trial from the mode
+        this.currentTrial = this.mode.generateTrial(this.currentLevelConfig);
 
-        if (!this.currentChallenge) return;
+        if (!this.currentTrial) return;
 
-        // If challenge specifies a message instead of a playable challenge, show it
-        if (this.currentChallenge.message) {
-            this.setMessage(this.currentChallenge.message, this.currentChallenge.messageType || "neutral");
-            if (this.currentChallenge.enabledKeys) {
-                this.enabledKeys = this.currentChallenge.enabledKeys;
-                this.updateKeypadState();
-            }
-            return;
+        // Update enabled keys from the trial
+        if (this.currentTrial.enabledKeys) {
+            this.enabledKeys = this.currentTrial.enabledKeys;
+            this.updateKeypadState();
         }
 
-        // If challenge specifies enabled keys, use those instead of level defaults
-        if (this.currentChallenge.enabledKeys) {
-            this.enabledKeys = this.currentChallenge.enabledKeys;
-            this.updateKeypadState();
+        // If trial specifies a message instead of a playable trial, show it
+        if (this.currentTrial.message) {
+            this.setMessage(this.currentTrial.message, this.currentTrial.messageType || "neutral");
+            return;
         }
 
         if (this.enabledKeys.length === 0) return;
 
-        // Play the challenge after a short delay
+        // Play the trial after a short delay
         setTimeout(() => {
-            if (this.currentChallenge) {
-                this.currentChallenge.playChallenge();
+            if (this.currentTrial && this.currentTrial.playTrial) {
+                this.currentTrial.playTrial();
             }
         }, 500);
     }
@@ -1803,14 +1784,14 @@ class App {
         }
 
         // Game mode logic
-        if (!this.mode || !this.currentChallenge) return;
+        if (!this.mode || !this.currentTrial) return;
 
-        // No active challenge (e.g., queue empty state)
-        if (!this.currentChallenge.targetKey) return;
+        // No active trial (e.g., queue empty state)
+        if (!this.currentTrial.targetKey) return;
 
         this.stats.total++;
 
-        const isCorrect = this.mode.checkAnswer(inputKey, this.currentChallenge);
+        const isCorrect = this.mode.checkAnswer(inputKey, this.currentTrial);
 
         if (isCorrect) {
             this.stats.correct++;
@@ -1840,7 +1821,7 @@ class App {
 
             this.isPlayingSequence = true;
             setTimeout(() => {
-                this.playComparisonSequence(inputKey, this.currentChallenge.targetKey);
+                this.playComparisonSequence(inputKey, this.currentTrial.targetKey);
             }, 600);
         }
 
