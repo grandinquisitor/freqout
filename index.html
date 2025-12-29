@@ -688,10 +688,14 @@ const COL_ADJECTIVES = ['soft', 'clear', 'sparkly', 'piercing'];
  * e.g., "1 — Warm, mellow" or "9 — Light, bright"
  */
 function getKeyDescription(keyChar) {
+    function capitalize(s) {
+        if (!s) return "";
+        return s.charAt(0).toUpperCase() + s.slice(1);
+    }
     const keyObj = KEYPAD_LAYOUT.find(k => k.key === keyChar);
     if (!keyObj) return keyChar;
 
-    const rowAdj = ROW_ADJECTIVES[keyObj.row];
+    const rowAdj = capitalize(ROW_ADJECTIVES[keyObj.row]);
     const colAdj = COL_ADJECTIVES[keyObj.col];
 
     return `${keyChar} — ${rowAdj}, ${colAdj}`;
