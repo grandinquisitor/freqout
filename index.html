@@ -621,7 +621,7 @@
         <div class="stats-bar">
             <div class="level-info-display">
                 <span class="level-label">Level <span id="level-display">1</span>:</span>
-                <span id="level-name-display" class="level-name">—</span>
+                <span id="level-name-display" class="level-name">&mdash;</span>
             </div>
             <div class="progress-container">
                 <div class="progress-bar">
@@ -685,7 +685,7 @@ const COL_ADJECTIVES = ['soft', 'clear', 'sparkly', 'piercing'];
 
 /**
  * Get a descriptive label for a key's tone character
- * e.g., "1 — Warm, mellow" or "9 — Light, bright"
+ * e.g., "1 - Warm, mellow" or "9 - Light, bright"
  */
 function getKeyDescription(keyChar) {
     function capitalize(s) {
@@ -698,7 +698,7 @@ function getKeyDescription(keyChar) {
     const rowAdj = capitalize(ROW_ADJECTIVES[keyObj.row]);
     const colAdj = COL_ADJECTIVES[keyObj.col];
 
-    return `${keyChar} — ${rowAdj}, ${colAdj}`;
+    return `${keyChar} \u2014 ${rowAdj}, ${colAdj}`;
 }
 
 const KEYPAD_LAYOUT = [
@@ -867,7 +867,7 @@ class PracticeMode {
     get description() { throw new Error('Must implement description getter'); }
 
     /** @returns {string} Icon/emoji for the mode */
-    get icon() { return '🎵'; }
+    get icon() { return '\u{1F4DE}'; }
 
     /** @returns {boolean} Whether this mode has levels to select */
     get hasLevels() { return true; }
@@ -911,10 +911,10 @@ class PracticeMode {
         const correctDesc = getKeyDescription(correctKey);
 
         return [
-            { key: wrongKey, type: 'wrong', label: `✗ ${wrongDesc}` },
-            { key: correctKey, type: 'correct', label: `✔ ${correctDesc}` },
-            { key: wrongKey, type: 'wrong', label: `✗ ${wrongDesc}` },
-            { key: correctKey, type: 'correct', label: `✔ ${correctDesc}` },
+            { key: wrongKey, type: 'wrong', label: `\u{2717} ${wrongDesc}` },
+            { key: correctKey, type: 'correct', label: `\u{2713} ${correctDesc}` },
+            { key: wrongKey, type: 'wrong', label: `\u{2717} ${wrongDesc}` },
+            { key: correctKey, type: 'correct', label: `\u{2713} ${correctDesc}` },
         ];
     }
 
@@ -966,7 +966,7 @@ class PracticeMode {
 class DTMFIdentifyMode extends PracticeMode {
     get id() { return 'dtmf-identify'; }
     get name() { return 'DTMF Identify'; }
-    get icon() { return '📞'; }
+    get icon() { return '\u{1F4DE}'; }
     get description() {
         return 'Train your ear to recognize telephone tones';
     }
@@ -1033,7 +1033,7 @@ class DTMFIdentifyMode extends PracticeMode {
 class FreePlayMode extends PracticeMode {
     get id() { return 'free-play'; }
     get name() { return 'Free Play'; }
-    get icon() { return '🎹'; }
+    get icon() { return '\u{1F3B9}'; }
     get description() {
         return 'Explore DTMF tones freely on the keypad';
     }
@@ -1072,7 +1072,7 @@ class SpacedRepetitionMode extends PracticeMode {
 
     get id() { return 'spaced-repetition'; }
     get name() { return 'Spaced Repetition'; }
-    get icon() { return '🧠'; }
+    get icon() { return '\u{1F9E0}'; }
     get description() {
         return 'SM-2 algorithm focuses practice on confusable tone pairs';
     }
@@ -1321,7 +1321,7 @@ class SpacedRepetitionMode extends PracticeMode {
             return {
                 targetKey: null,
                 enabledKeys: [],
-                message: "🎉 Queue empty! All caught up!",
+                message: "\u{1F389} Queue empty! All caught up!",
                 messageType: "correct",
                 playTrial: () => {}
             };
@@ -1688,7 +1688,7 @@ class App {
         // Reset progress display
         this.dom.progressFill.style.width = '0%';
         this.dom.progressPercent.textContent = '0%';
-        this.dom.levelName.textContent = '—';
+        this.dom.levelName.textContent = '\u2014';
 
         // Disable all keys
         document.querySelectorAll('.key').forEach(k => k.classList.add('disabled'));
