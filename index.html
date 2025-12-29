@@ -1135,6 +1135,17 @@ class SpacedRepetitionMode extends PracticeMode {
     }
 
     /**
+     * Fisher-Yates shuffle
+     */
+    shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    }
+
+    /**
      * Load cards from localStorage or create new deck
      */
     loadCards() {
@@ -1151,11 +1162,11 @@ class SpacedRepetitionMode extends PracticeMode {
                     }
                 }
             } else {
-                this.cards = this.generateAllCards();
+                this.cards = this.shuffleArray(this.generateAllCards());
             }
         } catch (e) {
             console.error('Failed to load SRS cards:', e);
-            this.cards = this.generateAllCards();
+            this.cards = this.shuffleArray(this.generateAllCards());
         }
     }
 
