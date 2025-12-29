@@ -685,6 +685,11 @@
             40%, 60% { transform: translate3d(4px, 0, 0); }
         }
 
+        /* --- Action Button States --- */
+        .action-btn svg.hidden {
+            display: none;
+        }
+
         @media (max-width: 380px) {
             .key { font-size: 1.2rem; }
             .keypad { padding: 15px; gap: 8px; }
@@ -761,9 +766,12 @@
 
         <div class="control-area">
             <div id="message" class="message-display message-neutral">Press Play to start</div>
-            <button id="replay-btn" class="action-btn">
-                <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-                Replay Tone
+
+            <button id="action-btn" class="action-btn">
+                <svg id="action-btn-icon-replay" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                <svg id="action-btn-icon-why" class="hidden" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                <svg id="action-btn-icon-continue" class="hidden" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                <span id="action-btn-text">Replay Tone</span>
             </button>
         </div>
 
@@ -817,6 +825,85 @@ function getKeyDescription(keyChar) {
     return {
         row: ROW_ADJECTIVES[keyObj.row],
         col: COL_ADJECTIVES[keyObj.col]
+    };
+}
+
+/**
+ * Analyze the type of confusion between two keys
+ * Returns simplified info for educational hints
+ */
+function analyzeConfusion(wrongKey, correctKey) {
+    const wrong = KEYPAD_LAYOUT.find(k => k.key === wrongKey);
+    const correct = KEYPAD_LAYOUT.find(k => k.key === correctKey);
+
+    if (!wrong || !correct) return null;
+
+    const rowDiff = Math.abs(wrong.row - correct.row);
+    const colDiff = Math.abs(wrong.col - correct.col);
+    const isAdjacent = (rowDiff <= 1 && colDiff <= 1) && (rowDiff + colDiff > 0);
+
+    // Same row = column frequency confusion (can't distinguish high freqs)
+    if (wrong.row === correct.row) {
+        const correctColFreq = COL_FREQS[correct.col];
+        const wrongColFreq = COL_FREQS[wrong.col];
+        const comparison = correctColFreq > wrongColFreq ? 'brighter and sharper' : 'softer and duller';
+
+        return {
+            type: 'col',
+            icon: '↔️',
+            title: 'Same Row',
+            tip: `Focus on the treble shimmer—the high-pitched part. ${correctKey} sounds ${comparison} than ${wrongKey}.`
+        };
+    }
+
+    // Same column = row frequency confusion (can't distinguish low freqs)
+    if (wrong.col === correct.col) {
+        const correctRowFreq = ROW_FREQS[correct.row];
+        const wrongRowFreq = ROW_FREQS[wrong.row];
+        const comparison = correctRowFreq > wrongRowFreq ? 'thinner and higher' : 'deeper and fuller';
+
+        return {
+            type: 'row',
+            icon: '↕️',
+            title: 'Same Column',
+            tip: `Focus on the bass note—the low rumble. ${correctKey} has a ${comparison} bass than ${wrongKey}.`
+        };
+    }
+
+    // Adjacent keys (diagonal neighbors)
+    if (isAdjacent) {
+        const correctRowFreq = ROW_FREQS[correct.row];
+        const wrongRowFreq = ROW_FREQS[wrong.row];
+        const correctColFreq = COL_FREQS[correct.col];
+        const wrongColFreq = COL_FREQS[wrong.col];
+
+        let tipParts = [];
+        if (correctRowFreq !== wrongRowFreq) {
+            tipParts.push(`bass is ${correctRowFreq > wrongRowFreq ? 'higher' : 'lower'}`);
+        }
+        if (correctColFreq !== wrongColFreq) {
+            tipParts.push(`treble is ${correctColFreq > wrongColFreq ? 'brighter' : 'softer'}`);
+        }
+
+        return {
+            type: 'adjacent',
+            icon: '↗️',
+            title: 'Adjacent Keys',
+            tip: `These are close neighbors! On ${correctKey}, the ${tipParts.join(' and the ')}.`
+        };
+    }
+
+    // Diagonal (non-adjacent) - both frequencies differ
+    const correctRowFreq = ROW_FREQS[correct.row];
+    const wrongRowFreq = ROW_FREQS[wrong.row];
+    const correctColFreq = COL_FREQS[correct.col];
+    const wrongColFreq = COL_FREQS[wrong.col];
+
+    return {
+        type: 'diagonal',
+        icon: '⤡',
+        title: 'Both Different',
+        tip: `Both tones differ—try listening to just the low part first, then the high part. ${correctKey} is ${correctRowFreq > wrongRowFreq ? 'higher' : 'lower'} in bass and ${correctColFreq > wrongColFreq ? 'brighter' : 'softer'} in treble than ${wrongKey}.`
     };
 }
 
@@ -1823,6 +1910,8 @@ class App {
         this.enabledKeys = [];
         this.isPlayingSequence = false;
         this.expandedModeId = null;
+        this.lastError = null;
+        this.feedbackState = 'none'; // 'none', 'why', 'tip'
 
         this.stats = {
             streak: 0,
@@ -1838,7 +1927,11 @@ class App {
             levelName: document.getElementById('level-name-display'),
             progressFill: document.getElementById('progress-fill'),
             progressPercent: document.getElementById('progress-percent'),
-            replay: document.getElementById('replay-btn'),
+            actionBtn: document.getElementById('action-btn'),
+            actionBtnText: document.getElementById('action-btn-text'),
+            actionBtnIconReplay: document.getElementById('action-btn-icon-replay'),
+            actionBtnIconWhy: document.getElementById('action-btn-icon-why'),
+            actionBtnIconContinue: document.getElementById('action-btn-icon-continue'),
             modeSelectOverlay: document.getElementById('mode-select-overlay'),
             modeList: document.getElementById('mode-list'),
             optionsCard: document.getElementById('options-card'),
@@ -1962,15 +2055,23 @@ class App {
             this.showModeSelect();
         });
 
-        // Replay button
-        this.dom.replay.addEventListener('click', () => {
-            if (this.mode && this.mode.isGameMode && this.currentTrial && !this.isPlayingSequence && !this.audio.isPlaying) {
-                // Track replay for SRS mode
-                if (this.mode.onReplay) {
-                    this.mode.onReplay();
+        // Unified action button - behavior depends on state
+        this.dom.actionBtn.addEventListener('click', () => {
+            if (this.feedbackState === 'none') {
+                // Replay mode
+                if (this.mode && this.mode.isGameMode && this.currentTrial && !this.isPlayingSequence && !this.audio.isPlaying) {
+                    if (this.mode.onReplay) {
+                        this.mode.onReplay();
+                    }
+                    this.currentTrial.playTrial();
+                    this.setMessage("Replaying...", "neutral");
                 }
-                this.currentTrial.playTrial();
-                this.setMessage("Replaying...", "neutral");
+            } else if (this.feedbackState === 'why') {
+                // Show tip
+                this.showTip();
+            } else if (this.feedbackState === 'tip') {
+                // Continue to next trial
+                this.exitFeedbackMode();
             }
         });
 
@@ -2030,6 +2131,36 @@ class App {
 
         // Keyboard support
         document.addEventListener('keydown', (e) => {
+            // Handle feedback states
+            if (this.feedbackState === 'tip') {
+                if (e.code === 'Escape' || e.code === 'Enter' || e.code === 'Space') {
+                    this.exitFeedbackMode();
+                    return;
+                }
+            } else if (this.feedbackState === 'why') {
+                if (e.code === 'Enter' || e.code === 'Space') {
+                    this.showTip();
+                    return;
+                } else if (e.code === 'Escape') {
+                    this.exitFeedbackMode();
+                    return;
+                }
+            }
+
+            // In any feedback state, allow playing the two highlighted keys
+            if (this.feedbackState !== 'none' && this.lastError) {
+                const key = e.key.toUpperCase();
+                if (key === this.lastError.wrongKey || key === this.lastError.correctKey) {
+                    this.audio.playToneForKey(key);
+                    const btn = document.querySelector(`.key[data-key="${key}"]`);
+                    if (btn) {
+                        btn.classList.add('key-active');
+                        setTimeout(() => btn.classList.remove('key-active'), 150);
+                    }
+                }
+                return;
+            }
+
             if (this.dom.modeSelectOverlay.style.display !== 'none') return;
             if (this.isPlayingSequence) return;
 
@@ -2043,7 +2174,7 @@ class App {
                     setTimeout(() => btn.classList.remove('key-active'), 150);
                 }
             } else if (e.code === 'Space' && this.mode && this.mode.isGameMode) {
-                this.dom.replay.click();
+                this.dom.actionBtn.click();
             } else if (e.code === 'Escape') {
                 this.showModeSelect();
             }
@@ -2150,11 +2281,16 @@ class App {
         this.mode = null;
         this.currentTrial = null;
         this.stats = { streak: 0, correct: 0, total: 0, level: 1 };
+        this.lastError = null;
+        this.feedbackState = 'none';
 
         // Reset progress display
         this.dom.progressFill.style.width = '0%';
         this.dom.progressPercent.textContent = '0%';
         this.dom.levelName.textContent = '\u2014';
+
+        // Reset button
+        this.setActionButton('replay');
 
         // Disable all keys
         document.querySelectorAll('.key').forEach(k => k.classList.add('disabled'));
@@ -2200,7 +2336,13 @@ class App {
         this.currentLevelIndex = index;
         this.currentLevelConfig = levels[index];
         this.stats.level = index + 1;
-        this.stats.streak = 0; // Reset streak when loading a new level
+        this.stats.streak = 0;
+        this.lastError = null;
+        this.feedbackState = 'none';
+
+        // Reset button
+        this.setActionButton('replay');
+
         this.dom.level.textContent = this.stats.level;
         this.dom.levelName.textContent = this.currentLevelConfig.name;
 
@@ -2257,6 +2399,15 @@ class App {
 
     handleInput(inputKey) {
         if (this.isPlayingSequence) return;
+
+        // In feedback mode, allow playing the two feedback keys
+        if (this.feedbackState !== 'none') {
+            if (this.lastError && (inputKey === this.lastError.wrongKey || inputKey === this.lastError.correctKey)) {
+                this.audio.playToneForKey(inputKey);
+            }
+            return;
+        }
+
         if (this.audio.isPlaying && this.mode && this.mode.isGameMode) return;
 
         const btn = document.querySelector(`.key[data-key="${inputKey}"]`);
@@ -2314,9 +2465,16 @@ class App {
         } else {
             this.stats.streak = 0;
             this.feedback(btn, 'wrong');
-            this.setMessage(`Wrong! Listen to the difference...`, "wrong");
-            this.updateProgress(false); // Quick reset animation
+            this.setMessage(`Wrong! That was ${this.currentTrial.targetKey}`, "wrong");
+            this.updateProgress(false);
 
+            // Store error for hint system
+            this.lastError = {
+                wrongKey: inputKey,
+                correctKey: this.currentTrial.targetKey
+            };
+
+            // Play comparison sequence, then enter "why" state
             this.isPlayingSequence = true;
             setTimeout(() => {
                 this.playComparisonSequence(inputKey, this.currentTrial.targetKey);
@@ -2326,12 +2484,71 @@ class App {
         this.updateStats();
     }
 
+    setActionButton(mode) {
+        // Reset all icons
+        this.dom.actionBtnIconReplay.classList.add('hidden');
+        this.dom.actionBtnIconWhy.classList.add('hidden');
+        this.dom.actionBtnIconContinue.classList.add('hidden');
+
+        if (mode === 'replay') {
+            this.dom.actionBtnIconReplay.classList.remove('hidden');
+            this.dom.actionBtnText.textContent = 'Replay Tone';
+        } else if (mode === 'why') {
+            this.dom.actionBtnIconWhy.classList.remove('hidden');
+            this.dom.actionBtnText.textContent = 'Drill Down';
+        } else if (mode === 'continue') {
+            this.dom.actionBtnIconContinue.classList.remove('hidden');
+            this.dom.actionBtnText.textContent = 'Continue';
+        }
+    }
+
+    showTip() {
+        if (!this.lastError) return;
+
+        const analysis = analyzeConfusion(this.lastError.wrongKey, this.lastError.correctKey);
+        if (!analysis) return;
+
+        this.feedbackState = 'tip';
+        this.setActionButton('continue');
+        this.setMessage(analysis.tip, "neutral");
+    }
+
+    exitFeedbackMode() {
+        this.feedbackState = 'none';
+        this.lastError = null;
+        this.setActionButton('replay');
+
+        // Continue to next round
+        this.setMessage("", "neutral");
+        this.nextRound();
+    }
+
     async playComparisonSequence(wrongKey, correctKey) {
         const sequence = this.mode.getComparisonSequence(wrongKey, correctKey);
         const toneDuration = 1000;
         const pauseDuration = 300;
 
+        // Show "Drill Down" button immediately during comparison
+        this.feedbackState = 'why';
+        this.setActionButton('why');
+
+        // Enable the two keys for tapping
+        document.querySelectorAll('.key').forEach(k => {
+            k.classList.add('disabled');
+        });
+
+        const wrongBtn = document.querySelector(`.key[data-key="${wrongKey}"]`);
+        const correctBtn = document.querySelector(`.key[data-key="${correctKey}"]`);
+
+        if (wrongBtn) wrongBtn.classList.remove('disabled');
+        if (correctBtn) correctBtn.classList.remove('disabled');
+
         for (let i = 0; i < sequence.length; i++) {
+            // If user clicked "Drill Down" and is now in tip state, stop the sequence
+            if (this.feedbackState === 'tip') {
+                break;
+            }
+
             const item = sequence[i];
             const btn = document.querySelector(`.key[data-key="${item.key}"]`);
 
@@ -2353,8 +2570,12 @@ class App {
         }
 
         this.isPlayingSequence = false;
-        this.setMessage("", "neutral");
-        setTimeout(() => this.nextRound(), 500);
+
+        // If still in "why" state (user didn't click), proceed to next trial
+        if (this.feedbackState === 'why') {
+            this.exitFeedbackMode();
+        }
+        // If in "tip" state, user clicked Drill Down - they'll click Continue when ready
     }
 
     sleep(ms) {
