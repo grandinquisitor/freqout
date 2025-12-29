@@ -1402,18 +1402,6 @@ class SpacedRepetitionMode extends PracticeMode {
         this.audio.playToneForKey(keyChar);
     }
 
-    getComparisonSequence(wrongKey, correctKey) {
-        const wrongDesc = getKeyDescription(wrongKey);
-        const correctDesc = getKeyDescription(correctKey);
-
-        return [
-            { key: wrongKey, type: 'wrong', label: `✗ ${wrongDesc}` },
-            { key: correctKey, type: 'correct', label: `✓ ${correctDesc}` },
-            { key: wrongKey, type: 'wrong', label: `✗ ${wrongDesc}` },
-            { key: correctKey, type: 'correct', label: `✓ ${correctDesc}` },
-        ];
-    }
-
     getStreakToAdvance() {
         return Infinity; // Never auto-advance
     }
