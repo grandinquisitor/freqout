@@ -1029,6 +1029,396 @@ class FreePlayMode extends PracticeMode {
 
 /**
  * ============================================================================
+ * SPACED REPETITION MODE
+ * SM-2 based training on confusable tone pairs
+ * ============================================================================
+ */
+
+class SpacedRepetitionMode extends PracticeMode {
+    constructor(audio) {
+        super(audio);
+        this.cards = null;
+        this.currentCard = null;
+        this.challengeStartTime = null;
+        this.replayUsed = false;
+        this.storageKey = 'freqout-srs-cards';
+    }
+
+    get id() { return 'spaced-repetition'; }
+    get name() { return 'Spaced Repetition'; }
+    get icon() { return '🧠'; }
+    get description() {
+        return 'SM-2 algorithm focuses practice on confusable tone pairs';
+    }
+    get hasLevels() { return false; }
+    get isGameMode() { return true; }
+
+    getLevels() {
+        return [{ name: "SRS Training", type: 'srs', description: "Practice until queue is empty" }];
+    }
+
+    /**
+     * Generate all 120 unique pairs as cards
+     */
+    generateAllCards() {
+        const cards = [];
+        const keys = KEYPAD_LAYOUT.map(k => k.key);
+
+        for (let i = 0; i < keys.length; i++) {
+            for (let j = i + 1; j < keys.length; j++) {
+                cards.push(this.createCard(keys[i], keys[j]));
+            }
+        }
+        return cards;
+    }
+
+    /**
+     * Create a new SM-2 card for a pair
+     */
+    createCard(key1, key2) {
+        return {
+            id: `${key1}-${key2}`,
+            key1,
+            key2,
+            // SM-2 parameters
+            easeFactor: 2.5,
+            interval: 0,        // days until next review
+            repetitions: 0,
+            nextReview: Date.now(),  // timestamp when due
+            lastReview: null
+        };
+    }
+
+    /**
+     * Load cards from localStorage or create new deck
+     */
+    loadCards() {
+        try {
+            const saved = localStorage.getItem(this.storageKey);
+            if (saved) {
+                this.cards = JSON.parse(saved);
+                // Ensure all 120 cards exist (in case we add new ones later)
+                const existingIds = new Set(this.cards.map(c => c.id));
+                const allCards = this.generateAllCards();
+                for (const card of allCards) {
+                    if (!existingIds.has(card.id)) {
+                        this.cards.push(card);
+                    }
+                }
+            } else {
+                this.cards = this.generateAllCards();
+            }
+        } catch (e) {
+            console.error('Failed to load SRS cards:', e);
+            this.cards = this.generateAllCards();
+        }
+    }
+
+    /**
+     * Save cards to localStorage
+     */
+    saveCards() {
+        try {
+            localStorage.setItem(this.storageKey, JSON.stringify(this.cards));
+        } catch (e) {
+            console.error('Failed to save SRS cards:', e);
+        }
+    }
+
+    /**
+     * Get Euclidean distance between two keys on the grid
+     */
+    getKeyDistance(key1, key2) {
+        const k1 = KEYPAD_LAYOUT.find(k => k.key === key1);
+        const k2 = KEYPAD_LAYOUT.find(k => k.key === key2);
+        if (!k1 || !k2) return Infinity;
+
+        const dr = k1.row - k2.row;
+        const dc = k1.col - k2.col;
+        return Math.sqrt(dr * dr + dc * dc);
+    }
+
+    /**
+     * Get due cards sorted by priority (most overdue first)
+     */
+    getDueCards() {
+        const now = Date.now();
+        return this.cards
+            .filter(card => card.nextReview <= now)
+            .sort((a, b) => a.nextReview - b.nextReview);
+    }
+
+    /**
+     * Get new cards (never reviewed) - limited introduction
+     */
+    getNewCards() {
+        return this.cards.filter(card => card.repetitions === 0);
+    }
+
+    /**
+     * Select the next card to review
+     * Prioritizes: due cards > new cards (limited)
+     */
+    selectNextCard() {
+        const dueCards = this.getDueCards();
+
+        if (dueCards.length > 0) {
+            // Pick most overdue card
+            return dueCards[0];
+        }
+
+        // Introduce new cards gradually
+        // Only if less than 5 cards are "in learning" (interval < 1 day)
+        const learningCards = this.cards.filter(c =>
+            c.repetitions > 0 && c.interval < 1
+        );
+
+        if (learningCards.length < 5) {
+            const newCards = this.getNewCards();
+            if (newCards.length > 0) {
+                // Pick a random new card
+                return newCards[Math.floor(Math.random() * newCards.length)];
+            }
+        }
+
+        return null; // Queue empty!
+    }
+
+    /**
+     * Find decoy keys that are each about as distant from the pair as the pair keys are from each other.
+     * This ensures all 4 enabled keys are roughly equally confusable.
+     */
+    selectDecoys(key1, key2) {
+        const pairDistance = this.getKeyDistance(key1, key2);
+        const allKeys = KEYPAD_LAYOUT.map(k => k.key);
+        const excludeKeys = new Set([key1, key2]);
+        const availableKeys = allKeys.filter(k => !excludeKeys.has(k));
+
+        // Score each available key by how close its distance to key1 or key2
+        // matches the pair's internal distance
+        const scoredKeys = availableKeys.map(k => {
+            const distToKey1 = this.getKeyDistance(k, key1);
+            const distToKey2 = this.getKeyDistance(k, key2);
+            // Use the minimum distance to either pair key
+            const minDist = Math.min(distToKey1, distToKey2);
+            const diff = Math.abs(minDist - pairDistance);
+            return { key: k, diff, minDist };
+        });
+
+        // Sort by how close they are to the target distance
+        scoredKeys.sort((a, b) => a.diff - b.diff);
+
+        // Pick 2 decoys from the top candidates with some randomness
+        // to avoid always picking the same decoys
+        const topN = Math.min(6, scoredKeys.length);
+        const topCandidates = scoredKeys.slice(0, topN);
+
+        // Shuffle top candidates and pick first 2
+        for (let i = topCandidates.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [topCandidates[i], topCandidates[j]] = [topCandidates[j], topCandidates[i]];
+        }
+
+        return [topCandidates[0].key, topCandidates[1].key];
+    }
+
+    /**
+     * Apply SM-2 algorithm to update card after review
+     * @param {Object} card - The card being reviewed
+     * @param {number} quality - Quality of response (0-5)
+     */
+    updateCardSM2(card, quality) {
+        // SM-2 algorithm
+        if (quality >= 3) {
+            // Correct response
+            if (card.repetitions === 0) {
+                card.interval = 1; // 1 day
+            } else if (card.repetitions === 1) {
+                card.interval = 6; // 6 days
+            } else {
+                card.interval = Math.round(card.interval * card.easeFactor);
+            }
+            card.repetitions++;
+        } else {
+            // Incorrect - reset
+            card.repetitions = 0;
+            card.interval = 0;
+        }
+
+        // Update ease factor
+        card.easeFactor = Math.max(1.3,
+            card.easeFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02))
+        );
+
+        // Calculate next review time
+        // For interval = 0, review again in this session (10 seconds)
+        // For interval > 0, convert days to milliseconds
+        if (card.interval === 0) {
+            card.nextReview = Date.now() + 10000; // 10 seconds
+        } else {
+            card.nextReview = Date.now() + card.interval * 24 * 60 * 60 * 1000;
+        }
+
+        card.lastReview = Date.now();
+    }
+
+    /**
+     * Penalize a card (used for wrong answers to affect the confusion pair)
+     */
+    penalizeCard(cardId) {
+        const card = this.cards.find(c => c.id === cardId);
+        if (card) {
+            // Apply a "wrong" update
+            this.updateCardSM2(card, 1);
+        }
+    }
+
+    /**
+     * Get or create card ID for a pair (handles ordering)
+     */
+    getCardId(key1, key2) {
+        // Ensure consistent ordering
+        const sorted = [key1, key2].sort();
+        return `${sorted[0]}-${sorted[1]}`;
+    }
+
+    getEnabledKeys(levelConfig) {
+        // Will be dynamically set per challenge
+        return [];
+    }
+
+    onLevelStart(levelConfig) {
+        this.loadCards();
+    }
+
+    generateChallenge(enabledKeys, levelConfig) {
+        // Select next card
+        this.currentCard = this.selectNextCard();
+
+        if (!this.currentCard) {
+            // Queue empty!
+            return {
+                targetKey: null,
+                queueEmpty: true,
+                playChallenge: () => {}
+            };
+        }
+
+        const { key1, key2 } = this.currentCard;
+
+        // Randomly pick which key from the pair to play
+        const targetKey = Math.random() < 0.5 ? key1 : key2;
+
+        // Select 2 decoys with similar "distance" to each other as our pair
+        const decoys = this.selectDecoys(key1, key2);
+
+        // Enable all 4 keys: both keys from the pair + both decoys
+        const options = [key1, key2, ...decoys];
+
+        // Reset challenge state
+        this.challengeStartTime = null;
+        this.replayUsed = false;
+
+        const challenge = {
+            targetKey: targetKey,  // The key whose tone is played (correct answer)
+            pairKey1: key1,
+            pairKey2: key2,
+            options: options,      // All 4 enabled keys
+            card: this.currentCard,
+            playChallenge: () => {
+                if (!this.challengeStartTime) {
+                    this.challengeStartTime = Date.now();
+                }
+                this.audio.playToneForKey(targetKey);
+            }
+        };
+
+        return challenge;
+    }
+
+    checkAnswer(inputKey, challenge) {
+        if (challenge.queueEmpty) return false;
+
+        const isCorrect = inputKey === challenge.targetKey;
+        const responseTime = Date.now() - this.challengeStartTime;
+
+        // Determine quality score
+        let quality;
+        if (isCorrect) {
+            if (responseTime > 5000 || this.replayUsed) {
+                quality = 3; // Correct but difficult
+            } else if (responseTime > 3000) {
+                quality = 4; // Correct with hesitation
+            } else {
+                quality = 5; // Perfect
+            }
+        } else {
+            quality = 1; // Wrong
+
+            // Penalize the confusion pair (correct answer + wrong answer chosen)
+            // This creates/updates the card for the pair the user confused
+            const confusionCardId = this.getCardId(challenge.targetKey, inputKey);
+            this.penalizeCard(confusionCardId);
+        }
+
+        // Update the current card (the pair we were testing)
+        this.updateCardSM2(challenge.card, quality);
+        this.saveCards();
+
+        return isCorrect;
+    }
+
+    /**
+     * Called when replay button is pressed
+     */
+    onReplay() {
+        this.replayUsed = true;
+    }
+
+    /**
+     * Override to track replay usage
+     */
+    playKeyTone(keyChar) {
+        this.audio.playToneForKey(keyChar);
+    }
+
+    getComparisonSequence(wrongKey, correctKey) {
+        return [
+            { key: wrongKey, type: 'wrong', label: `Your answer: ${wrongKey}` },
+            { key: correctKey, type: 'correct', label: `Correct: ${correctKey}` },
+            { key: wrongKey, type: 'wrong', label: `Your answer: ${wrongKey}` },
+            { key: correctKey, type: 'correct', label: `Correct: ${correctKey}` },
+        ];
+    }
+
+    getStreakToAdvance() {
+        return Infinity; // Never auto-advance
+    }
+
+    getProgressPercent(stats, levelConfig) {
+        // Show percentage of cards that have been "learned" (interval >= 1 day)
+        if (!this.cards) return 0;
+        const learnedCount = this.cards.filter(c => c.interval >= 1).length;
+        return Math.round((learnedCount / this.cards.length) * 100);
+    }
+
+    /**
+     * Get stats for display
+     */
+    getStats() {
+        if (!this.cards) return { due: 0, learning: 0, learned: 0, total: 120 };
+
+        const now = Date.now();
+        const due = this.cards.filter(c => c.nextReview <= now).length;
+        const learning = this.cards.filter(c => c.repetitions > 0 && c.interval < 1).length;
+        const learned = this.cards.filter(c => c.interval >= 1).length;
+
+        return { due, learning, learned, total: this.cards.length };
+    }
+}
+
+/**
+ * ============================================================================
  * MODE REGISTRY
  * Register all available practice modes here
  * ============================================================================
@@ -1061,6 +1451,7 @@ const ModeRegistry = {
 
 // Register available modes
 ModeRegistry.register(DTMFIdentifyMode);
+ModeRegistry.register(SpacedRepetitionMode);
 ModeRegistry.register(FreePlayMode);
 
 /**
@@ -1210,6 +1601,10 @@ class App {
         // Replay button
         this.dom.replay.addEventListener('click', () => {
             if (this.mode && this.mode.isGameMode && this.currentChallenge && !this.isPlayingSequence && !this.audio.isPlaying) {
+                // Track replay for SRS mode
+                if (this.mode.onReplay) {
+                    this.mode.onReplay();
+                }
                 this.currentChallenge.playChallenge();
                 this.setMessage("Replaying...", "neutral");
             }
@@ -1357,10 +1752,26 @@ class App {
     }
 
     nextRound() {
-        if (this.enabledKeys.length === 0) return;
+        if (!this.mode) return;
 
         // Generate challenge from the mode
         this.currentChallenge = this.mode.generateChallenge(this.enabledKeys, this.currentLevelConfig);
+
+        // Handle SRS queue empty state
+        if (this.currentChallenge && this.currentChallenge.queueEmpty) {
+            this.setMessage("🎉 Queue empty! All caught up!", "correct");
+            // Disable all keys
+            document.querySelectorAll('.key').forEach(k => k.classList.add('disabled'));
+            return;
+        }
+
+        // For SRS mode, dynamically update enabled keys based on challenge options
+        if (this.currentChallenge && this.currentChallenge.options) {
+            this.enabledKeys = this.currentChallenge.options;
+            this.updateKeypadState();
+        }
+
+        if (this.enabledKeys.length === 0 && !this.currentChallenge?.options) return;
 
         // Play the challenge after a short delay
         setTimeout(() => {
@@ -1385,6 +1796,9 @@ class App {
 
         // Game mode logic
         if (!this.mode || !this.currentChallenge) return;
+
+        // Handle queue empty state
+        if (this.currentChallenge.queueEmpty) return;
 
         this.stats.total++;
 
