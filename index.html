@@ -684,21 +684,17 @@ const ROW_ADJECTIVES = ['deep', 'rich', 'hollow', 'nasal'];
 const COL_ADJECTIVES = ['soft', 'clear', 'sparkly', 'piercing'];
 
 /**
- * Get a descriptive label for a key's tone character
- * e.g., "1 - Warm, mellow" or "9 - Light, bright"
+ * Get the adjective pair describing a key's tone character
+ * Returns { row: 'deep', col: 'soft' } or null if key not found
  */
 function getKeyDescription(keyChar) {
-    function capitalize(s) {
-        if (!s) return "";
-        return s.charAt(0).toUpperCase() + s.slice(1);
-    }
     const keyObj = KEYPAD_LAYOUT.find(k => k.key === keyChar);
-    if (!keyObj) return keyChar;
+    if (!keyObj) return null;
 
-    const rowAdj = capitalize(ROW_ADJECTIVES[keyObj.row]);
-    const colAdj = COL_ADJECTIVES[keyObj.col];
-
-    return `${keyChar} \u2014 ${rowAdj}, ${colAdj}`;
+    return {
+        row: ROW_ADJECTIVES[keyObj.row],
+        col: COL_ADJECTIVES[keyObj.col]
+    };
 }
 
 const KEYPAD_LAYOUT = [
@@ -910,11 +906,18 @@ class PracticeMode {
         const wrongDesc = getKeyDescription(wrongKey);
         const correctDesc = getKeyDescription(correctKey);
 
+        const formatLabel = (key, desc, symbol) => {
+            if (desc) {
+                return `${symbol} ${key} (${desc.row}, ${desc.col})`;
+            }
+            return `${symbol} ${key}`;
+        };
+
         return [
-            { key: wrongKey, type: 'wrong', label: `\u{2717} ${wrongDesc}` },
-            { key: correctKey, type: 'correct', label: `\u{2713} ${correctDesc}` },
-            { key: wrongKey, type: 'wrong', label: `\u{2717} ${wrongDesc}` },
-            { key: correctKey, type: 'correct', label: `\u{2713} ${correctDesc}` },
+            { key: wrongKey, type: 'wrong', label: formatLabel(wrongKey, wrongDesc, '\u2717') },
+            { key: correctKey, type: 'correct', label: formatLabel(correctKey, correctDesc, '\u2713') },
+            { key: wrongKey, type: 'wrong', label: formatLabel(wrongKey, wrongDesc, '\u2717') },
+            { key: correctKey, type: 'correct', label: formatLabel(correctKey, correctDesc, '\u2713') },
         ];
     }
 
@@ -1815,8 +1818,9 @@ class App {
             this.stats.correct++;
             this.stats.streak++;
             this.feedback(btn, 'correct');
-            const description = getKeyDescription(inputKey);
-            this.setMessage(`Correct! ${description}`, "correct");
+            const desc = getKeyDescription(inputKey);
+            const descText = desc ? ` (${desc.row}, ${desc.col})` : '';
+            this.setMessage(`Correct! ${inputKey}${descText}`, "correct");
             this.updateProgress(true);
 
             // Check for level advancement
