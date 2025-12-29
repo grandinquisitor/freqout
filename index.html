@@ -827,6 +827,140 @@ const KEYPAD_LAYOUT = [
     { key: '*', row: 3, col: 0 }, { key: '0', row: 3, col: 1 }, { key: '#', row: 3, col: 2 }, { key: 'D', row: 3, col: 3 }
 ];
 
+/**
+ * ============================================================================
+ * STORAGE MANAGER
+ * Centralized persistence layer - modes should NOT access localStorage directly
+ * ============================================================================
+ */
+
+class StorageManager {
+    constructor(prefix = 'freqout') {
+        this.prefix = prefix;
+        this.registeredKeys = new Map(); // modeId -> storageKey
+    }
+
+    /**
+     * Build a namespaced storage key
+     * @param {string} key - The key name (e.g., 'srs-cards')
+     * @returns {string} Fully qualified key (e.g., 'freqout-srs-cards')
+     */
+    buildKey(key) {
+        return `${this.prefix}-${key}`;
+    }
+
+    /**
+     * Register a storage key for a mode
+     * This allows the StorageManager to know about all keys for reset purposes
+     * @param {string} modeId - The mode's identifier
+     * @param {string} key - The storage key (without prefix)
+     */
+    registerKey(modeId, key) {
+        if (!this.registeredKeys.has(modeId)) {
+            this.registeredKeys.set(modeId, []);
+        }
+        this.registeredKeys.get(modeId).push(key);
+    }
+
+    /**
+     * Get all registered keys
+     * @returns {string[]} Array of all registered keys (without prefix)
+     */
+    getAllRegisteredKeys() {
+        const allKeys = [];
+        for (const keys of this.registeredKeys.values()) {
+            allKeys.push(...keys);
+        }
+        return allKeys;
+    }
+
+    /**
+     * Load data from storage
+     * @param {string} key - Storage key (without prefix)
+     * @returns {any} Parsed data or null if not found/error
+     */
+    load(key) {
+        try {
+            const fullKey = this.buildKey(key);
+            const saved = localStorage.getItem(fullKey);
+            if (saved) {
+                return JSON.parse(saved);
+            }
+        } catch (e) {
+            console.error(`Failed to load ${key}:`, e);
+        }
+        return null;
+    }
+
+    /**
+     * Save data to storage
+     * @param {string} key - Storage key (without prefix)
+     * @param {any} data - Data to save (will be JSON stringified)
+     * @returns {boolean} Success status
+     */
+    save(key, data) {
+        try {
+            const fullKey = this.buildKey(key);
+            localStorage.setItem(fullKey, JSON.stringify(data));
+            return true;
+        } catch (e) {
+            console.error(`Failed to save ${key}:`, e);
+            return false;
+        }
+    }
+
+    /**
+     * Remove data from storage
+     * @param {string} key - Storage key (without prefix)
+     * @returns {boolean} Success status
+     */
+    remove(key) {
+        try {
+            const fullKey = this.buildKey(key);
+            localStorage.removeItem(fullKey);
+            return true;
+        } catch (e) {
+            console.error(`Failed to remove ${key}:`, e);
+            return false;
+        }
+    }
+
+    /**
+     * Reset all registered storage
+     * @returns {boolean} Success status
+     */
+    resetAll() {
+        let success = true;
+        for (const key of this.getAllRegisteredKeys()) {
+            if (!this.remove(key)) {
+                success = false;
+            }
+        }
+        return success;
+    }
+
+    /**
+     * Reset storage for a specific mode
+     * @param {string} modeId - The mode's identifier
+     * @returns {boolean} Success status
+     */
+    resetMode(modeId) {
+        const keys = this.registeredKeys.get(modeId);
+        if (!keys) return true;
+
+        let success = true;
+        for (const key of keys) {
+            if (!this.remove(key)) {
+                success = false;
+            }
+        }
+        return success;
+    }
+}
+
+// Global storage manager instance
+const storage = new StorageManager();
+
 class AudioManager {
     constructor() {
         this.ctx = null;
@@ -994,6 +1128,12 @@ class PracticeMode {
     /** @returns {boolean} Whether this is a game mode (has challenges) */
     get isGameMode() { return true; }
 
+    /**
+     * @returns {string|null} Storage key for this mode's persistent data (without prefix)
+     * Return null if the mode doesn't need persistent storage
+     */
+    get storageKey() { return null; }
+
     /** @returns {Array} Level configurations for this mode */
     getLevels() { throw new Error('Must implement getLevels()'); }
 
@@ -1080,6 +1220,39 @@ class PracticeMode {
     getProgressPercent(stats, levelConfig) {
         const target = this.getStreakToAdvance();
         return Math.min(100, Math.round((stats.streak / target) * 100));
+    }
+
+    /**
+     * Get the initial/default state for this mode's persistent data
+     * Override if the mode needs persistent storage
+     * @returns {any} Default state
+     */
+    getDefaultState() {
+        return null;
+    }
+
+    /**
+     * Load persistent state - called by App, not by the mode itself
+     * @param {any} state - The loaded state (or null if none exists)
+     */
+    loadState(state) {
+        // Override if needed
+    }
+
+    /**
+     * Get current state for persistence - called by App when saving
+     * @returns {any} State to persist (or null if nothing to save)
+     */
+    getState() {
+        return null;
+    }
+
+    /**
+     * Called when the mode's storage is about to be reset
+     * Allows the mode to clean up internal state
+     */
+    onStorageReset() {
+        // Override if needed
     }
 }
 
@@ -1194,7 +1367,6 @@ class SpacedRepetitionMode extends PracticeMode {
         this.currentCard = null;
         this.challengeStartTime = null;
         this.replayUsed = false;
-        this.storageKey = 'freqout-srs-cards';
     }
 
     get id() { return 'spaced-repetition'; }
@@ -1205,6 +1377,7 @@ class SpacedRepetitionMode extends PracticeMode {
     }
     get hasLevels() { return false; }
     get isGameMode() { return true; }
+    get storageKey() { return 'srs-cards'; }
 
     getLevels() {
         return [{ name: "SRS Training", type: 'srs', description: "Practice until queue is empty" }];
@@ -1254,39 +1427,44 @@ class SpacedRepetitionMode extends PracticeMode {
     }
 
     /**
-     * Load cards from localStorage or create new deck
+     * Get default state - a fresh shuffled deck
      */
-    loadCards() {
-        try {
-            const saved = localStorage.getItem(this.storageKey);
-            if (saved) {
-                this.cards = JSON.parse(saved);
-                // Ensure all 120 cards exist (in case we add new ones later)
-                const existingIds = new Set(this.cards.map(c => c.id));
-                const allCards = this.generateAllCards();
-                for (const card of allCards) {
-                    if (!existingIds.has(card.id)) {
-                        this.cards.push(card);
-                    }
+    getDefaultState() {
+        return this.shuffleArray(this.generateAllCards());
+    }
+
+    /**
+     * Load state from storage manager
+     */
+    loadState(state) {
+        if (state && Array.isArray(state)) {
+            this.cards = state;
+            // Ensure all 120 cards exist (in case we add new ones later)
+            const existingIds = new Set(this.cards.map(c => c.id));
+            const allCards = this.generateAllCards();
+            for (const card of allCards) {
+                if (!existingIds.has(card.id)) {
+                    this.cards.push(card);
                 }
-            } else {
-                this.cards = this.shuffleArray(this.generateAllCards());
             }
-        } catch (e) {
-            console.error('Failed to load SRS cards:', e);
-            this.cards = this.shuffleArray(this.generateAllCards());
+        } else {
+            this.cards = this.getDefaultState();
         }
     }
 
     /**
-     * Save cards to localStorage
+     * Get current state for persistence
      */
-    saveCards() {
-        try {
-            localStorage.setItem(this.storageKey, JSON.stringify(this.cards));
-        } catch (e) {
-            console.error('Failed to save SRS cards:', e);
-        }
+    getState() {
+        return this.cards;
+    }
+
+    /**
+     * Handle storage reset
+     */
+    onStorageReset() {
+        this.cards = null;
+        this.currentCard = null;
     }
 
     /**
@@ -1447,7 +1625,11 @@ class SpacedRepetitionMode extends PracticeMode {
     }
 
     onLevelStart(levelConfig) {
-        this.loadCards();
+        // Cards are loaded via loadState() before this is called
+        // If cards weren't loaded for some reason, initialize them
+        if (!this.cards) {
+            this.cards = this.getDefaultState();
+        }
     }
 
     generateTrial(levelConfig) {
@@ -1526,9 +1708,20 @@ class SpacedRepetitionMode extends PracticeMode {
 
         // Update the current card (the pair we were testing)
         this.updateCardSM2(trial.card, quality);
-        this.saveCards();
+
+        // Signal that state needs saving (App will handle this)
+        this._stateChanged = true;
 
         return isCorrect;
+    }
+
+    /**
+     * Check if state has changed since last save
+     */
+    hasStateChanged() {
+        const changed = this._stateChanged;
+        this._stateChanged = false;
+        return changed;
     }
 
     /**
@@ -1582,9 +1775,14 @@ const ModeRegistry = {
     modes: {},
 
     register(ModeClass) {
-        // Create a temporary instance to get the id
+        // Create a temporary instance to get the id and register storage keys
         const tempInstance = new ModeClass(null);
         this.modes[tempInstance.id] = ModeClass;
+
+        // Register storage key if the mode has one
+        if (tempInstance.storageKey) {
+            storage.registerKey(tempInstance.id, tempInstance.storageKey);
+        }
     },
 
     get(id, audio) {
@@ -1791,11 +1989,17 @@ class App {
             }
         });
 
-        // Reset storage button
+        // Reset storage button - now uses StorageManager
         this.dom.resetStorageBtn.addEventListener('click', () => {
             if (this.resetConfirmPending) {
-                // Second click - do the reset
-                localStorage.removeItem('freqout-srs-cards');
+                // Second click - do the reset via StorageManager
+                storage.resetAll();
+
+                // Notify any active mode
+                if (this.mode && this.mode.onStorageReset) {
+                    this.mode.onStorageReset();
+                }
+
                 this.dom.resetStorageBtn.textContent = 'Done!';
                 this.dom.resetStorageBtn.disabled = true;
                 this.dom.resetStorageBtn.classList.remove('confirm');
@@ -1874,9 +2078,35 @@ class App {
         this.dom.resetStorageBtn.classList.remove('confirm');
     }
 
+    /**
+     * Load mode state from storage
+     */
+    loadModeState(mode) {
+        if (mode.storageKey) {
+            const savedState = storage.load(mode.storageKey);
+            mode.loadState(savedState);
+        }
+    }
+
+    /**
+     * Save mode state to storage
+     */
+    saveModeState(mode) {
+        if (mode.storageKey) {
+            const state = mode.getState();
+            if (state !== null) {
+                storage.save(mode.storageKey, state);
+            }
+        }
+    }
+
     startMode(modeId, levelIndex) {
         this.audio.init();
         this.mode = ModeRegistry.get(modeId, this.audio);
+
+        // Load persisted state for this mode
+        this.loadModeState(this.mode);
+
         this.dom.modeSelectOverlay.style.display = 'none';
         this.dom.backBtn.classList.remove('hidden');
 
@@ -1908,6 +2138,11 @@ class App {
     }
 
     showModeSelect() {
+        // Save state before leaving
+        if (this.mode) {
+            this.saveModeState(this.mode);
+        }
+
         this.dom.modeSelectOverlay.style.display = 'flex';
         this.dom.backBtn.classList.add('hidden');
 
@@ -2048,6 +2283,11 @@ class App {
         this.stats.total++;
 
         const isCorrect = this.mode.checkAnswer(inputKey, this.currentTrial, { showAdjectives: this.showAdjectives });
+
+        // Save state after answer (if mode has persistent storage)
+        if (this.mode.hasStateChanged && this.mode.hasStateChanged()) {
+            this.saveModeState(this.mode);
+        }
 
         if (isCorrect) {
             this.stats.correct++;
