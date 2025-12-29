@@ -905,9 +905,10 @@ class PracticeMode {
      * Check if the user's input is correct
      * @param {string} inputKey - The key the user pressed
      * @param {Object} trial - The current trial object
+     * @param {Object} options - Additional options (e.g., { showAdjectives: boolean })
      * @returns {boolean} Whether the answer is correct
      */
-    checkAnswer(inputKey, trial) {
+    checkAnswer(inputKey, trial, options = {}) {
         return inputKey === trial.targetKey;
     }
 
@@ -1374,7 +1375,7 @@ class SpacedRepetitionMode extends PracticeMode {
         return trial;
     }
 
-    checkAnswer(inputKey, trial) {
+    checkAnswer(inputKey, trial, options = {}) {
         if (!trial.targetKey) return false;
 
         const isCorrect = inputKey === trial.targetKey;
@@ -1389,6 +1390,11 @@ class SpacedRepetitionMode extends PracticeMode {
                 quality = 4; // Correct with hesitation
             } else {
                 quality = 5; // Perfect
+            }
+
+            // Penalize by 1 quality point if adjectives are shown (training wheels)
+            if (options.showAdjectives && quality > 3) {
+                quality -= 1;
             }
         } else {
             quality = 1; // Wrong
@@ -1854,7 +1860,7 @@ class App {
 
         this.stats.total++;
 
-        const isCorrect = this.mode.checkAnswer(inputKey, this.currentTrial);
+        const isCorrect = this.mode.checkAnswer(inputKey, this.currentTrial, { showAdjectives: this.showAdjectives });
 
         if (isCorrect) {
             this.stats.correct++;
