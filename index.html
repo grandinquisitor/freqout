@@ -1797,6 +1797,7 @@ class App {
                 // Second click - do the reset
                 localStorage.removeItem('freqout-srs-cards');
                 this.dom.resetStorageBtn.textContent = 'Done!';
+                this.dom.resetStorageBtn.disabled = true;
                 this.dom.resetStorageBtn.classList.remove('confirm');
                 this.dom.resetStorageBtn.style.background = 'var(--primary)';
                 this.dom.resetStorageBtn.style.color = '#000';
@@ -1806,6 +1807,7 @@ class App {
                     this.dom.resetStorageBtn.textContent = 'Reset';
                     this.dom.resetStorageBtn.style.background = '';
                     this.dom.resetStorageBtn.style.color = '';
+                    this.dom.resetStorageBtn.disabled = false;
                 }, 2000);
             } else {
                 // First click - ask for confirmation
