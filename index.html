@@ -677,6 +677,26 @@
 const ROW_FREQS = [697, 770, 852, 941];
 const COL_FREQS = [1209, 1336, 1477, 1633]; // 1633 is the 4th column (A, B, C, D)
 
+// Adjectives for describing tone character
+// Row adjectives describe the bass/low frequency character
+const ROW_ADJECTIVES = ['Warm', 'Full', 'Light', 'Thin'];
+// Column adjectives describe the treble/high frequency character
+const COL_ADJECTIVES = ['mellow', 'clear', 'bright', 'sharp'];
+
+/**
+ * Get a descriptive label for a key's tone character
+ * e.g., "1 — Warm, mellow" or "9 — Light, bright"
+ */
+function getKeyDescription(keyChar) {
+    const keyObj = KEYPAD_LAYOUT.find(k => k.key === keyChar);
+    if (!keyObj) return keyChar;
+
+    const rowAdj = ROW_ADJECTIVES[keyObj.row];
+    const colAdj = COL_ADJECTIVES[keyObj.col];
+
+    return `${keyChar} — ${rowAdj}, ${colAdj}`;
+}
+
 const KEYPAD_LAYOUT = [
     { key: '1', row: 0, col: 0 }, { key: '2', row: 0, col: 1 }, { key: '3', row: 0, col: 2 }, { key: 'A', row: 0, col: 3 },
     { key: '4', row: 1, col: 0 }, { key: '5', row: 1, col: 1 }, { key: '6', row: 1, col: 2 }, { key: 'B', row: 1, col: 3 },
@@ -883,11 +903,14 @@ class PracticeMode {
      * @returns {Array} Sequence of { key, type: 'wrong'|'correct', label }
      */
     getComparisonSequence(wrongKey, correctKey) {
+        const wrongDesc = getKeyDescription(wrongKey);
+        const correctDesc = getKeyDescription(correctKey);
+
         return [
-            { key: wrongKey, type: 'wrong', label: `Your answer: ${wrongKey}` },
-            { key: correctKey, type: 'correct', label: `Correct: ${correctKey}` },
-            { key: wrongKey, type: 'wrong', label: `Your answer: ${wrongKey}` },
-            { key: correctKey, type: 'correct', label: `Correct: ${correctKey}` },
+            { key: wrongKey, type: 'wrong', label: `✗ ${wrongDesc}` },
+            { key: correctKey, type: 'correct', label: `✓ ${correctDesc}` },
+            { key: wrongKey, type: 'wrong', label: `✗ ${wrongDesc}` },
+            { key: correctKey, type: 'correct', label: `✓ ${correctDesc}` },
         ];
     }
 
@@ -1376,11 +1399,14 @@ class SpacedRepetitionMode extends PracticeMode {
     }
 
     getComparisonSequence(wrongKey, correctKey) {
+        const wrongDesc = getKeyDescription(wrongKey);
+        const correctDesc = getKeyDescription(correctKey);
+
         return [
-            { key: wrongKey, type: 'wrong', label: `Your answer: ${wrongKey}` },
-            { key: correctKey, type: 'correct', label: `Correct: ${correctKey}` },
-            { key: wrongKey, type: 'wrong', label: `Your answer: ${wrongKey}` },
-            { key: correctKey, type: 'correct', label: `Correct: ${correctKey}` },
+            { key: wrongKey, type: 'wrong', label: `✗ ${wrongDesc}` },
+            { key: correctKey, type: 'correct', label: `✓ ${correctDesc}` },
+            { key: wrongKey, type: 'wrong', label: `✗ ${wrongDesc}` },
+            { key: correctKey, type: 'correct', label: `✓ ${correctDesc}` },
         ];
     }
 
